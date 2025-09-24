@@ -4,14 +4,6 @@ data/
 *.xlsx
 *.xls
 
-# Model files
-models/
-*.joblib
-*.pkl
-*.pickle
-*.h5
-*.model
-
 # Python
 __pycache__/
 *.py[cod]
