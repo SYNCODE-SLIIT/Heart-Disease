@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -30,6 +30,10 @@ const predictSchema = z.object({
   prevalentStroke: z.enum(['Yes', 'No']).optional(),
   prevalentHyp: z.enum(['Yes', 'No']).optional(),
   diabetes: z.enum(['Yes', 'No']).optional(),
+}).superRefine((data, ctx) => {
+  if (data.currentSmoker === 'No' && typeof data.cigsPerDay === 'number' && data.cigsPerDay !== 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cigsPerDay'], message: 'Must be 0 when not a smoker' });
+  }
 });
 
 type FormData = z.infer<typeof predictSchema>;
@@ -47,7 +51,32 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
     handleSubmit,
     formState: { errors },
     reset,
+    watch,
+    setValue,
   } = useForm<FormData>({ resolver: zodResolver(predictSchema) });
+
+  // Prevent typing minus/exponent/plus in number inputs
+  const preventMinus: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+    if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+      e.preventDefault();
+    }
+  };
+
+  // Prevent pasting invalid characters into number fields
+  const preventInvalidPaste: React.ClipboardEventHandler<HTMLInputElement> = (e) => {
+    const text = e.clipboardData.getData('text');
+    if (/[eE+\-]/.test(text)) {
+      e.preventDefault();
+    }
+  };
+
+  // If currentSmoker is 'No', enforce cigsPerDay = 0 and disable field
+  const currentSmokerValue = watch('currentSmoker');
+  useEffect(() => {
+    if (currentSmokerValue === 'No') {
+      setValue('cigsPerDay', 0, { shouldValidate: true, shouldDirty: true });
+    }
+  }, [currentSmokerValue, setValue]);
 
   const onSubmit: SubmitHandler<FormData> = async (data) => {
     setIsLoading(true);
@@ -99,7 +128,10 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
               </label>
               <input
                 type="number"
+                min={18}
                 {...register('age', { valueAsNumber: true })}
+                onKeyDown={preventMinus}
+                onPaste={preventInvalidPaste}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 45"
               />
@@ -139,7 +171,10 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
               <input
                 type="number"
                 step="0.1"
+                min={70}
                 {...register('sysBP', { valueAsNumber: true })}
+                onKeyDown={preventMinus}
+                onPaste={preventInvalidPaste}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 130"
               />
@@ -155,7 +190,10 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
               <input
                 type="number"
                 step="0.1"
-                {...register('pulsePressure', { valueAsNumber: true })}
+                min={10}
+                {...register('pulsePressure', { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
+                onKeyDown={preventMinus}
+                onPaste={preventInvalidPaste}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 40"
               />
@@ -171,7 +209,10 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
               <input
                 type="number"
                 step="0.1"
+                min={10}
                 {...register('BMI', { valueAsNumber: true })}
+                onKeyDown={preventMinus}
+                onPaste={preventInvalidPaste}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 25.5"
               />
@@ -187,7 +228,10 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
               <input
                 type="number"
                 step="0.1"
-                {...register('heartRate', { valueAsNumber: true })}
+                min={30}
+                {...register('heartRate', { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
+                onKeyDown={preventMinus}
+                onPaste={preventInvalidPaste}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 75"
               />
@@ -210,7 +254,10 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
               <input
                 type="number"
                 step="0.1"
-                {...register('totChol', { valueAsNumber: true })}
+                min={100}
+                {...register('totChol', { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
+                onKeyDown={preventMinus}
+                onPaste={preventInvalidPaste}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 200"
               />
@@ -226,7 +273,10 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
               <input
                 type="number"
                 step="0.1"
-                {...register('glucose', { valueAsNumber: true })}
+                min={50}
+                {...register('glucose', { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
+                onKeyDown={preventMinus}
+                onPaste={preventInvalidPaste}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 90"
               />
@@ -249,9 +299,13 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
               <input
                 type="number"
                 step="0.1"
-                {...register('cigsPerDay', { valueAsNumber: true })}
+                min={0}
+                {...register('cigsPerDay', { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
+                onKeyDown={preventMinus}
+                onPaste={preventInvalidPaste}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                placeholder="e.g., 0"
+                placeholder={currentSmokerValue === 'No' ? '0 (disabled when not a smoker)' : 'e.g., 0'}
+                disabled={currentSmokerValue === 'No'}
               />
               {errors.cigsPerDay && (
                 <p className="text-red-600 text-sm mt-1">{errors.cigsPerDay.message}</p>
