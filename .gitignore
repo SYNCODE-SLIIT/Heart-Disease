@@ -35,7 +35,7 @@ venv.bak/
 myenv/
 
 # Jupyter Notebook checkpoints
-.ipynb_checkpoints
+**/.ipynb_checkpoints/
 
 # IDE
 .vscode/
@@ -68,8 +68,14 @@ htmlcov/
 coverage.xml
 *.cover
 
-# Node modules (in case of any Node.js dependencies)
-node_modules/
+# Node.js dependencies and build artifacts
+**/node_modules/
+chd-web/.next/
+chd-web/out/
+chd-web/.env.local
+chd-web/tsconfig.tsbuildinfo
+chd-web/.vercel/
+chd-web/.turbo/
 
 # Model files (uncomment if you don't want to commit large model files)
 # *.pkl
