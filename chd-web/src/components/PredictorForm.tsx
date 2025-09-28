@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { PredictIn, PredictOut } from '../lib/types';
 import { postPredict, ApiError } from '../lib/api';
@@ -46,7 +47,7 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
     handleSubmit,
     formState: { errors },
     reset,
-  } = useForm<FormData>();
+  } = useForm<FormData>({ resolver: zodResolver(predictSchema) });
 
   const onSubmit: SubmitHandler<FormData> = async (data) => {
     setIsLoading(true);
