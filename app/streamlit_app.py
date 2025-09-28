@@ -81,15 +81,20 @@ with st.expander("About this app", expanded=False):
     )
 
 model = load_model()
+st.success("App loaded and model is ready.")
 expected_cols = get_expected_columns(model)
+if expected_cols is None:
+    st.warning("Couldn't determine expected input columns from the pipeline. We'll align inputs best-effort.")
 
 with st.sidebar:
     st.header("Prediction Settings")
     threshold = st.slider("Decision threshold (positive if P ≥ threshold)", 0.0, 1.0, 0.35, 0.01)
+    debug = st.checkbox("Show debug details", value=False)
 
 
 st.subheader("Enter Patient Details")
 st.write("Fields mirror the training dataset used in the notebook.")
+st.info("Fill the form below and click Predict.")
 
 with st.form("patient_form"):
     col1, col2 = st.columns(2)
@@ -113,6 +118,8 @@ with st.form("patient_form"):
         glucose = st.slider("Glucose (mg/dL)", 40, 250, 95)
 
     submitted = st.form_submit_button("Predict")
+
+result_container = st.container()
 
 if submitted:
     # Collect input as a single-row DataFrame matching the training feature names
@@ -145,13 +152,18 @@ if submitted:
         df_in = df_in[expected_cols]
 
     # Predict
-    try:
-        proba = float(model.predict_proba(df_in)[0, 1])
-        pred_default = int(model.predict(df_in)[0])
-    except Exception as e:
-        st.error("Prediction failed. See details below.")
-        st.exception(e)
-        st.stop()
+    with st.spinner("Computing prediction..."):
+        try:
+            proba = float(model.predict_proba(df_in)[0, 1])
+            pred_default = int(model.predict(df_in)[0])
+        except Exception as e:
+            st.error("Prediction failed. See details below.")
+            st.exception(e)
+            if debug:
+                with st.expander("Debug — inputs and expected columns"):
+                    st.write({"expected_cols": expected_cols})
+                    st.dataframe(df_in, width="stretch")
+            st.stop()
 
     # Apply user threshold
     pred_thresh = int(proba >= threshold)
@@ -172,6 +184,12 @@ if submitted:
 
     with st.expander("Input sent to the model"):
         st.dataframe(df_in, width="stretch")
+    if debug:
+        with st.expander("Debug — inputs and expected columns"):
+            st.write({"expected_cols": expected_cols})
+            st.dataframe(df_in, width="stretch")
+else:
+    st.caption("Awaiting input. Submit the form to see predictions.")
 
 
 st.divider()
