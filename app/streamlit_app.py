@@ -86,12 +86,6 @@ expected_cols = get_expected_columns(model)
 with st.sidebar:
     st.header("Prediction Settings")
     threshold = st.slider("Decision threshold (positive if P ≥ threshold)", 0.0, 1.0, 0.35, 0.01)
-    st.divider()
-    st.markdown("Model info")
-    try:
-        st.code(str(model), language="python")
-    except Exception:
-        st.write(type(model))
 
 
 st.subheader("Enter Patient Details")
