@@ -55,3 +55,33 @@ Thumbs.db
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Temporary files
+tmp/
+temp/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Node modules (in case of any Node.js dependencies)
+node_modules/
+
+# Model files (uncomment if you don't want to commit large model files)
+# *.pkl
+# *.joblib
+# *.h5
+# *.pb
+
+# Data files (uncomment if you don't want to commit data)
+# *.csv
+# *.json
+# *.xlsx
+# *.xls
+
+# Backup files
+*.bak
+*.backup
