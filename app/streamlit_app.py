@@ -19,6 +19,9 @@ import joblib
 import numpy as np
 import pandas as pd
 import streamlit as st
+import altair as alt
+from pathlib import Path
+from datetime import datetime
 
 
 # ---------------------------
@@ -61,6 +64,18 @@ def get_expected_columns(model) -> List[str] | None:
 
 def yes_no(label: str, default: str = "No") -> str:
     return st.selectbox(label, ["No", "Yes"], index=0 if default == "No" else 1)
+
+
+# Simple file logger to help diagnose client-side blank page issues
+LOG_PATH = Path("app/streamlit_debug.log")
+def log_debug(msg: str) -> None:
+    try:
+        LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(f"{datetime.utcnow().isoformat()}Z - {msg}\n")
+    except Exception:
+        # Best-effort logging only
+        pass
 
 
 # ---------------------------
@@ -122,26 +137,32 @@ with st.form("patient_form"):
 result_container = st.container()
 
 if submitted:
-    # Collect input as a single-row DataFrame matching the training feature names
+    log_debug("Form submitted")
+    # Collect input, then normalize to likely training schema/types
     row: Dict[str, object] = {
         "gender": gender,
-        "age": age,
-        "currentSmoker": currentSmoker,
-        "cigsPerDay": cigsPerDay,
-        "BPMeds": BPMeds,
-        "prevalentStroke": prevalentStroke,
-        "prevalentHyp": prevalentHyp,
-        "diabetes": diabetes,
-        "totChol": totChol,
-        "sysBP": sysBP,
-        "BMI": BMI,
-        "heartRate": heartRate,
-        "glucose": glucose,
-        "pulsePressure": pulsePressure,
-        # Note: 'education' and 'diaBP' were dropped in preprocessing.
+        "age": int(age),
+        "currentSmoker": 1 if currentSmoker == "Yes" else 0,
+        "cigsPerDay": int(cigsPerDay),
+        "BPMeds": 1 if BPMeds == "Yes" else 0,
+        "prevalentStroke": 1 if prevalentStroke == "Yes" else 0,
+        "prevalentHyp": 1 if prevalentHyp == "Yes" else 0,
+        "diabetes": 1 if diabetes == "Yes" else 0,
+        "totChol": float(totChol),
+        "sysBP": float(sysBP),
+        "BMI": float(BMI),
+        "heartRate": float(heartRate),
+        "glucose": float(glucose),
+        "pulsePressure": float(pulsePressure),
     }
 
+    # Map gender to 'male' if that's what the model expects
+    if expected_cols is not None and "male" in expected_cols:
+        row["male"] = 1 if gender == "Male" else 0
+        row.pop("gender", None)
+
     df_in = pd.DataFrame([row])
+    log_debug(f"Prepared input df shape={df_in.shape} cols={list(df_in.columns)}")
 
     # If the model expects a specific set of columns, add any missing ones as NaN
     if expected_cols is not None:
@@ -154,9 +175,12 @@ if submitted:
     # Predict
     with st.spinner("Computing prediction..."):
         try:
+            log_debug("Calling model.predict_proba")
             proba = float(model.predict_proba(df_in)[0, 1])
             pred_default = int(model.predict(df_in)[0])
+            log_debug(f"Model returned proba={proba} pred_default={pred_default}")
         except Exception as e:
+            log_debug(f"Prediction exception: {e}")
             st.error("Prediction failed. See details below.")
             st.exception(e)
             if debug:
@@ -175,7 +199,7 @@ if submitted:
         st.write(f"Model default decision: {'Yes' if pred_default==1 else 'No'} @ 0.50")
         st.write(f"Decision @ threshold {threshold:.2f}: {'Yes' if pred_thresh==1 else 'No'}")
     with colB:
-        st.progress(min(max(proba, 0.0), 1.0), text="Risk probability")
+        st.progress(min(max(proba, 0.0), 1.0))
 
     if pred_thresh == 1:
         st.error("High Risk: Predicted TenYearCHD = Yes")
@@ -188,6 +212,86 @@ if submitted:
         with st.expander("Debug — inputs and expected columns"):
             st.write({"expected_cols": expected_cols})
             st.dataframe(df_in, width="stretch")
+
+    # ---------------------------
+    # Visuals after submission
+    # ---------------------------
+    st.markdown("## Visuals")
+    vis_col1, vis_col2 = st.columns(2)
+
+    # Probability donut
+    try:
+        donut_df = pd.DataFrame({
+            "label": ["Risk", "No Risk"],
+            "value": [proba, 1 - proba],
+        })
+        donut = alt.Chart(donut_df).mark_arc(innerRadius=60).encode(
+            theta=alt.Theta("value:Q"),
+            color=alt.Color("label:N", scale=alt.Scale(range=["#d62728", "#2ca02c"])),
+            tooltip=[alt.Tooltip("value:Q", format=".1%"), "label"],
+        ).properties(height=300)
+        with vis_col1:
+            st.altair_chart(donut, use_container_width=True)
+    except Exception as e:
+        if debug:
+            st.write("Donut error:", e)
+
+    # Numeric features bar (scaled to 0-1 for quick visual)
+    try:
+        numeric_keys = [k for k, v in row.items() if isinstance(v, (int, float))]
+        num_df = pd.DataFrame({
+            "feature": numeric_keys,
+            "value": [float(row[k]) for k in numeric_keys],
+        })
+        # Simple normalization for display (min-max across shown values)
+        if not num_df.empty:
+            vmin, vmax = float(num_df.value.min()), float(num_df.value.max())
+            denom = (vmax - vmin) or 1.0
+            num_df["norm"] = (num_df.value - vmin) / denom
+            bars = alt.Chart(num_df).mark_bar().encode(
+                x=alt.X("norm:Q", title="Normalized value (0-1)"),
+                y=alt.Y("feature:N", sort='-x'),
+                tooltip=["feature", alt.Tooltip("value:Q")],
+            ).properties(height=380)
+            with vis_col2:
+                st.altair_chart(bars, use_container_width=True)
+    except Exception as e:
+        if debug:
+            st.write("Numeric bar error:", e)
+
+    # Binary flags visual intentionally removed per request
+
+    # Feature importance (if available)
+    try:
+        clf = None
+        if hasattr(model, "named_steps"):
+            for name, step in reversed(list(model.named_steps.items())):
+                if hasattr(step, "feature_importances_"):
+                    clf = step
+                    break
+        if clf is not None and hasattr(clf, "feature_importances_"):
+            feat_names = None
+            pre = model.named_steps.get("preprocessor") if hasattr(model, "named_steps") else None
+            if pre is not None and hasattr(pre, "get_feature_names_out"):
+                try:
+                    feat_names = pre.get_feature_names_out()
+                except Exception:
+                    feat_names = None
+            if feat_names is None:
+                feat_names = expected_cols or [f"f{i}" for i in range(len(clf.feature_importances_))]
+            imp_df = pd.DataFrame({
+                "feature": list(feat_names)[: len(clf.feature_importances_)],
+                "importance": clf.feature_importances_,
+            }).sort_values("importance", ascending=False).head(20)
+            bar = alt.Chart(imp_df).mark_bar().encode(
+                x=alt.X("importance:Q", title="Importance"),
+                y=alt.Y("feature:N", sort='-x', title="Feature"),
+                tooltip=["feature", alt.Tooltip("importance:Q", format=".4f")],
+            ).properties(height=400)
+            st.altair_chart(bar, use_container_width=True)
+    except Exception as e:
+        if debug:
+            st.write("Importance bar error:", e)
 else:
     st.caption("Awaiting input. Submit the form to see predictions.")
 
