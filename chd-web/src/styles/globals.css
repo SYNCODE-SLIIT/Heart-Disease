@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+/* Custom styles */
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
