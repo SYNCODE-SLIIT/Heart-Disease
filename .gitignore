@@ -1,9 +1,3 @@
-# Dataset files
-data/
-*.csv
-*.xlsx
-*.xls
-
 # Python
 __pycache__/
 *.py[cod]
@@ -37,6 +31,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+myenv/
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
