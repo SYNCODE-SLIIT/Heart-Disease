@@ -171,7 +171,7 @@ if submitted:
         st.success("Low Risk: Predicted TenYearCHD = No")
 
     with st.expander("Input sent to the model"):
-        st.dataframe(df_in, use_container_width=True)
+        st.dataframe(df_in, width="stretch")
 
 
 st.divider()
@@ -192,7 +192,7 @@ if uploaded is not None:
         out = df_batch.copy()
         out["proba"] = probs
         out["pred@thr"] = preds
-        st.dataframe(out.head(50), use_container_width=True)
+        st.dataframe(out.head(50), width="stretch")
         st.download_button(
             label="Download predictions as CSV",
             data=out.to_csv(index=False).encode("utf-8"),
