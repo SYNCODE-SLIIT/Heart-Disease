@@ -13,6 +13,8 @@ from .settings import MODEL_PATH, THRESHOLD_PATH, API_V1_PREFIX, MODEL_VERSION, 
 # Global variables to store loaded model and configuration
 model = None
 threshold_config = None
+# Will be populated from the loaded pipeline so API uses the exact same raw input order
+MODEL_EXPECTED_COLUMNS = None
 
 
 @asynccontextmanager
@@ -24,12 +26,23 @@ async def lifespan(app: FastAPI):
         # Load the trained pipeline
         model = joblib.load(MODEL_PATH)
         print(f"✅ Model loaded from {MODEL_PATH}")
-        
+
+        # Infer expected raw input columns from the preprocessor used at training time
+        global MODEL_EXPECTED_COLUMNS
+        try:
+            MODEL_EXPECTED_COLUMNS = (
+                model.named_steps["preprocessor"].feature_names_in_.tolist()
+            )
+            print(f"✅ Input columns inferred from model: {MODEL_EXPECTED_COLUMNS}")
+        except Exception as e:
+            print(f"⚠️ Could not infer expected columns from model: {e}")
+            MODEL_EXPECTED_COLUMNS = None
+
         # Load threshold configuration
         with open(THRESHOLD_PATH, 'r') as f:
             threshold_config = json.load(f)
         print(f"✅ Threshold config loaded: {threshold_config}")
-        
+
     except Exception as e:
         print(f"❌ Error loading model or config: {e}")
         raise
@@ -44,7 +57,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app with lifespan
 app = FastAPI(
     title="CHD Risk Prediction API",
-    description="API for 10-year Coronary Heart Disease risk prediction using Random Forest model",
+    description="API for 10-year Coronary Heart Disease risk prediction using a scikit-learn pipeline",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -59,50 +72,53 @@ app.add_middleware(
 )
 
 
-# Expected columns for the model (in order)
-EXPECTED_COLUMNS = [
-    'age', 'gender', 'sysBP', 'pulsePressure', 'BMI', 
-    'totChol', 'glucose', 'heartRate', 'cigsPerDay',
-    'currentSmoker', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes'
-]
-
-
-def convert_yes_no_to_binary(value: str) -> int:
-    """Convert Yes/No strings to 1/0."""
+def _normalize_gender(value: str):
+    """Normalize gender string to the same representation used in training (Male/Female)."""
     if isinstance(value, str):
-        return 1 if value.lower() == "yes" else 0
+        v = value.strip().lower()
+        if v.startswith("m"):
+            return "Male"
+        elif v.startswith("f"):
+            return "Female"
     return value
 
 
-def convert_gender_to_binary(gender: str) -> int:
-    """Convert Male/Female to 1/0 (Male=1, Female=0)."""
-    if isinstance(gender, str):
-        return 1 if gender.lower() == "male" else 0
-    return gender
+def _normalize_yes_no(value: str):
+    """Normalize Yes/No string casing to match training (Yes/No)."""
+    if isinstance(value, str):
+        v = value.strip().lower()
+        return "Yes" if v == "yes" else "No"
+    return value
 
 
 def prepare_input_data(input_data: PredictIn) -> pd.DataFrame:
-    """Convert input data to pandas DataFrame with proper column order and types."""
-    
+    """Convert input data to pandas DataFrame with proper column order and types,
+    keeping categorical variables as strings so they are encoded exactly like training.
+    """
+
     # Convert input to dict
     data_dict = input_data.model_dump()
-    
-    # Convert categorical variables to binary
-    if 'gender' in data_dict:
-        data_dict['gender'] = convert_gender_to_binary(data_dict['gender'])
-    
+
+    # Normalize categorical strings (do NOT convert to 0/1)
+    if 'gender' in data_dict and data_dict['gender'] is not None:
+        data_dict['gender'] = _normalize_gender(data_dict['gender'])
+
     for col in ['currentSmoker', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes']:
         if col in data_dict and data_dict[col] is not None:
-            data_dict[col] = convert_yes_no_to_binary(data_dict[col])
-    
-    # Create DataFrame with expected columns in order
-    row_data = []
-    for col in EXPECTED_COLUMNS:
-        value = data_dict.get(col, np.nan)
-        row_data.append(value)
-    
-    df = pd.DataFrame([row_data], columns=EXPECTED_COLUMNS)
-    
+            data_dict[col] = _normalize_yes_no(data_dict[col])
+
+    # Build DataFrame with same input columns as the model's preprocessor
+    cols = MODEL_EXPECTED_COLUMNS or [
+        'age', 'gender', 'sysBP', 'pulsePressure', 'BMI',
+        'totChol', 'glucose', 'heartRate', 'cigsPerDay',
+        'currentSmoker', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes'
+    ]
+
+    row = []
+    for col in cols:
+        row.append(data_dict.get(col, np.nan))
+
+    df = pd.DataFrame([row], columns=cols)
     return df
 
 
@@ -117,9 +133,15 @@ async def get_meta():
     """Get metadata about the model and expected input format."""
     if threshold_config is None:
         raise HTTPException(status_code=500, detail="Threshold configuration not loaded")
-    
+
+    expected = MODEL_EXPECTED_COLUMNS or [
+        'age', 'gender', 'sysBP', 'pulsePressure', 'BMI',
+        'totChol', 'glucose', 'heartRate', 'cigsPerDay',
+        'currentSmoker', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes'
+    ]
+
     return MetaOut(
-        expected_columns=EXPECTED_COLUMNS,
+        expected_columns=expected,
         threshold=threshold_config["threshold"],
         model_version=MODEL_VERSION
     )
