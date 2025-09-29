@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 // No direct file upload API now; using JSON /batch
 import { parseFile, normalizeBatch, cleanedCsv, type NormalizeResult } from '../lib/batchNormalize';
+import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 
 
 export default function BulkPredictPanel() {
@@ -15,12 +17,80 @@ export default function BulkPredictPanel() {
   const [norm, setNorm] = useState<NormalizeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [predictRes, setPredictRes] = useState<{
     count: number;
     results: { rowIndex: number; probability: number; label: string; topFactors: { feature: string; direction: string; impact: number }[]; messages: string[] }[];
     warnings: string[];
     errors: string[];
   } | null>(null);
+  const [exportFormat, setExportFormat] = useState<'csv'|'xlsx'>('xlsx');
+  const [showFormatMenu, setShowFormatMenu] = useState(false);
+
+  const mergedRows = (): Record<string, unknown>[] => {
+    if (!norm || !predictRes) return [];
+    const out: Record<string, unknown>[] = [];
+    for (let i = 0; i < Math.min(norm.rows.length, predictRes.results.length); i++) {
+      const base = norm.rows[i] as Record<string, unknown>;
+      const r = predictRes.results[i];
+      const tf = r.topFactors || [];
+      const merged: Record<string, unknown> = {
+        ...base,
+        probability: r.probability,
+        label: r.label,
+      };
+      // flatten top 3 factors
+      tf.slice(0, 3).forEach((f, idx) => {
+        const k = idx + 1;
+        merged[`top${k}_feature`] = f.feature;
+        merged[`top${k}_direction`] = f.direction;
+        merged[`top${k}_impact`] = f.impact;
+      });
+      out.push(merged);
+    }
+    return out;
+  };
+
+  const downloadCsv = () => {
+    const rows = mergedRows();
+    if (!rows.length) return;
+    const csv = Papa.unparse(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `heartsense_results_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleReset = () => {
+    setFile(null);
+    setSheetNames(undefined);
+    setSheet(undefined);
+    setRawRows(null);
+    setNorm(null);
+    setPredictRes(null);
+    setError(null);
+    setIsDragging(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    // Scroll back to top of the uploader
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const downloadXlsx = () => {
+    const rows = mergedRows();
+    if (!rows.length) return;
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Results');
+    const fname = `heartsense_results_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.xlsx`;
+    XLSX.writeFile(wb, fname);
+  };
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -43,6 +113,12 @@ export default function BulkPredictPanel() {
       const msg = e instanceof Error ? e.message : 'Request failed';
       setError(msg);
     },
+    onSuccess: () => {
+      // Scroll to results after predictions are ready
+      setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+    },
   });
 
   const rowCount = norm?.rows.length ?? 0;
@@ -62,6 +138,10 @@ export default function BulkPredictPanel() {
         setSheet(parsed.usedSheet);
         const n = normalizeBatch(parsed.rows);
         setNorm(n);
+        // Scroll to preview once normalized rows are set
+        setTimeout(() => {
+          previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 50);
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Failed to read file';
         setError(msg);
@@ -116,6 +196,7 @@ export default function BulkPredictPanel() {
             type="file"
             accept=".csv, .xls, .xlsx"
             className="hidden"
+            ref={fileInputRef}
             onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
           />
           <div className="text-center">
@@ -174,6 +255,16 @@ export default function BulkPredictPanel() {
           >
             {mutation.isPending ? 'Processing…' : 'Run Predictions'}
           </button>
+          <div className="md:col-span-3 flex justify-end">
+            <button
+              type="button"
+              onClick={handleReset}
+              className="mt-2 inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+              title="Reset and upload another file"
+            >
+              ↺ Reset
+            </button>
+          </div>
         </div>
 
         {rowCount > 0 && (
@@ -232,7 +323,7 @@ export default function BulkPredictPanel() {
 
       {/* Preview of cleaned rows */}
       {norm && norm.rows.length>0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
+        <div ref={previewRef} className="bg-white rounded-2xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-3">
             <div className="text-md font-semibold text-gray-900">Preview of cleaned data (first 10 rows)</div>
           </div>
@@ -261,9 +352,50 @@ export default function BulkPredictPanel() {
 
       {/* Predictions */}
       {predictRes && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
+        <div ref={resultsRef} className="bg-white rounded-2xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-3">
             <div className="text-md font-semibold text-gray-900">Results</div>
+            <div className="flex items-stretch gap-0 relative">
+              {/* Left-side dropdown toggle */}
+              <button
+                type="button"
+                onClick={() => setShowFormatMenu((s)=>!s)}
+                className="px-3 py-2 border border-red-700 text-red-700 rounded-l-xl bg-white hover:bg-red-50"
+                aria-haspopup="listbox"
+                aria-expanded={showFormatMenu}
+                title="Select format"
+              >
+                {exportFormat.toUpperCase()} ▾
+              </button>
+              {showFormatMenu && (
+                <ul className="absolute right-36 top-10 z-10 bg-white border rounded-lg shadow text-sm" role="listbox">
+                  <li
+                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                    role="option"
+                    aria-selected={exportFormat==='xlsx'}
+                    onClick={()=>{setExportFormat('xlsx'); setShowFormatMenu(false);}}
+                  >
+                    XLSX
+                  </li>
+                  <li
+                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                    role="option"
+                    aria-selected={exportFormat==='csv'}
+                    onClick={()=>{setExportFormat('csv'); setShowFormatMenu(false);}}
+                  >
+                    CSV
+                  </li>
+                </ul>
+              )}
+              {/* Big red download button */}
+              <button
+                type="button"
+                onClick={() => exportFormat==='xlsx' ? downloadXlsx() : downloadCsv()}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-r-xl font-semibold"
+              >
+                Download
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
