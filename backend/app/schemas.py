@@ -59,6 +59,7 @@ class PredictOut(BaseModel):
     model_version: str = Field(..., description="Model version")
 
     class Config:
+        protected_namespaces = ()
         json_schema_extra = {
             "example": {
                 "probability": 0.15,
@@ -77,6 +78,7 @@ class MetaOut(BaseModel):
     model_version: str = Field(..., description="Model version")
 
     class Config:
+        protected_namespaces = ()
         json_schema_extra = {
             "example": {
                 "expected_columns": ["age", "gender", "sysBP", "pulsePressure", "BMI", "totChol", "glucose", "heartRate", "cigsPerDay", "currentSmoker", "BPMeds", "prevalentStroke", "prevalentHyp", "diabetes"],
