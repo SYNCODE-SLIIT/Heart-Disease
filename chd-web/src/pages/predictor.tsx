@@ -9,6 +9,7 @@ import { PredictOut } from '../lib/types';
 
 export default function Predictor() {
   const [result, setResult] = useState<PredictOut | null>(null);
+  const [activeTab, setActiveTab] = useState<'single' | 'batch'>('single');
 
   const handleResult = (newResult: PredictOut) => {
     setResult(newResult);
@@ -49,11 +50,22 @@ export default function Predictor() {
             {/* Tabs */}
             <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4">
               <div className="flex gap-2 border-b pb-2">
-                <button id="tab-single" className="px-4 py-2 rounded-lg bg-red-600 text-white">Single Patient</button>
-                <button id="tab-batch" className="px-4 py-2 rounded-lg hover:bg-gray-100">Batch Upload</button>
+                <button
+                  className={`px-4 py-2 rounded-lg ${activeTab==='single' ? 'bg-red-600 text-white' : 'hover:bg-gray-100'}`}
+                  onClick={() => setActiveTab('single')}
+                >
+                  Single Patient
+                </button>
+                <button
+                  className={`px-4 py-2 rounded-lg ${activeTab==='batch' ? 'bg-red-600 text-white' : 'hover:bg-gray-100'}`}
+                  onClick={() => setActiveTab('batch')}
+                >
+                  Batch Upload
+                </button>
               </div>
-              {/* Simple client-side tab toggle via small script */}
-              <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-12 items-start" id="panel-single">
+              {/* React state-based tab toggle */}
+              {activeTab==='single' && (
+              <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
                 <div>
                   <div className="mb-3 text-sm text-gray-500">Using classification threshold <span className="font-semibold text-red-600">0.30</span></div>
                   <PredictorForm onResult={handleResult} />
@@ -95,38 +107,12 @@ export default function Predictor() {
                   )}
                 </div>
               </div>
-              <div className="mt-4 hidden" id="panel-batch">
-                <BulkPredictPanel />
-              </div>
-              <script
-                dangerouslySetInnerHTML={{
-                  __html: `
-                    (function(){
-                      const singleBtn = document.getElementById('tab-single');
-                      const batchBtn = document.getElementById('tab-batch');
-                      const single = document.getElementById('panel-single');
-                      const batch = document.getElementById('panel-batch');
-                      function activate(which){
-                        if(which==='single'){
-                          singleBtn.classList.add('bg-red-600','text-white');
-                          batchBtn.classList.remove('bg-red-600','text-white');
-                          batchBtn.classList.add('hover:bg-gray-100');
-                          single.classList.remove('hidden');
-                          batch.classList.add('hidden');
-                        }else{
-                          batchBtn.classList.add('bg-red-600','text-white');
-                          singleBtn.classList.remove('bg-red-600','text-white');
-                          singleBtn.classList.add('hover:bg-gray-100');
-                          batch.classList.remove('hidden');
-                          single.classList.add('hidden');
-                        }
-                      }
-                      singleBtn.addEventListener('click',()=>activate('single'));
-                      batchBtn.addEventListener('click',()=>activate('batch'));
-                    })();
-                  `,
-                }}
-              />
+              )}
+              {activeTab==='batch' && (
+                <div className="mt-4">
+                  <BulkPredictPanel />
+                </div>
+              )}
             </div>
           </div>
         </main>

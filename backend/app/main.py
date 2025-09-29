@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from .schemas import PredictIn, PredictOut, MetaOut
+from .schemas import PredictIn, PredictOut, MetaOut, BatchRequest, BatchResponse, BatchResultItem, TopFactor
 from .settings import MODEL_PATH, THRESHOLD_PATH, API_V1_PREFIX, MODEL_VERSION, ALLOWED_ORIGINS
 from .prepare import prepare_for_model
 from .schema_specs import CANONICAL_COLUMNS, DEFAULT_THRESHOLD, RISK_LOW_MAX, RISK_MED_MAX
@@ -272,6 +272,101 @@ async def batch_predict(
         resp[key] = rows
 
     return JSONResponse(content=resp)
+
+
+def _fast_top_factors(df_ready: pd.DataFrame, proba: np.ndarray, n_top: int = 3) -> list[list[dict]]:
+    """Fast, model-agnostic per-row factor approximation.
+    Heuristic: compute absolute z-score of numeric features per row relative to column mean/std
+    (on the incoming batch) and map higher magnitude to higher impact; use sign based on
+    standardized value sign. Categorical flags contribute a fixed unit if 'Yes'.
+    This is not SHAP but provides quick directional hints.
+    """
+    numeric_cols = [c for c in CANONICAL_COLUMNS if c not in {'gender','currentSmoker','BPMeds','prevalentStroke','prevalentHyp','diabetes'}]
+    cat_cols = ['gender','currentSmoker','BPMeds','prevalentStroke','prevalentHyp','diabetes']
+    # Stats for numeric
+    means = df_ready[numeric_cols].mean(numeric_only=True)
+    stds = df_ready[numeric_cols].std(numeric_only=True).replace({0: 1.0}).fillna(1.0)
+    results: list[list[dict]] = []
+    for i in range(len(df_ready)):
+        row = df_ready.iloc[i]
+        scores: list[tuple[str, float, str]] = []
+        for c in numeric_cols:
+            val = row[c]
+            if pd.isna(val):
+                continue
+            z = (float(val) - float(means.get(c, 0.0))) / float(stds.get(c, 1.0))
+            scores.append((c, abs(z), '+' if z >= 0 else '-'))
+        for c in cat_cols:
+            v = str(row[c]) if c in row else ''
+            if c == 'gender':
+                # Slight weight for Male vs Female differences as placeholder
+                if v == 'Male':
+                    scores.append((c, 0.4, '+'))
+                elif v == 'Female':
+                    scores.append((c, 0.3, '-'))
+            else:
+                if v == 'Yes':
+                    scores.append((c, 0.8, '+'))
+        # sort and pick top
+        scores.sort(key=lambda x: x[1], reverse=True)
+        top = [{ 'feature': f, 'direction': d, 'impact': round(float(s), 3) } for f, s, d in scores[:n_top]]
+        results.append(top)
+    return results
+
+
+@app.post(f"/batch", response_model=BatchResponse)
+async def batch_json(req: BatchRequest):
+    """JSON-based batch prediction endpoint.
+    Expects canonical rows already normalized on the client. Returns per-row probabilities,
+    labels ("Yes"/"No") based on threshold, and quick top factor hints.
+    """
+    if model is None:
+        raise HTTPException(status_code=500, detail="Model not loaded")
+
+    if not req.rows:
+        raise HTTPException(status_code=400, detail="No rows provided")
+
+    # Build DataFrame in canonical order
+    try:
+        df_ready = pd.DataFrame([r.model_dump() for r in req.rows], columns=CANONICAL_COLUMNS)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid rows payload: {e}")
+
+    # Predict probabilities
+    try:
+        probs = model.predict_proba(df_ready[CANONICAL_COLUMNS])[:, 1]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Prediction error: {e}")
+
+    # Compute fast top factors
+    top_lists = _fast_top_factors(df_ready, probs, n_top=3)
+
+    # Build results
+    results: list[BatchResultItem] = []
+    thr = req.threshold if req.threshold is not None else DEFAULT_THRESHOLD
+    for i, p in enumerate(probs):
+        label = 'Yes' if float(p) >= float(thr) else 'No'
+        item = BatchResultItem(
+            rowIndex=i,
+            probability=round(float(p), 4),
+            label=label,
+            topFactors=[TopFactor(**tf) for tf in top_lists[i]],
+            messages=[],
+        )
+        results.append(item)
+
+    return BatchResponse(
+        count=len(results),
+        results=results,
+        warnings=[],
+        errors=[],
+    )
+
+
+@app.post(f"{API_V1_PREFIX}/batch", response_model=BatchResponse)
+async def batch_json_v1(req: BatchRequest):
+    # Delegate to the same logic as /batch
+    return await batch_json(req)
 
 
 @app.get(f"/batch/export")
