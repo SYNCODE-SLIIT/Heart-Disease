@@ -15,7 +15,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List
 
-import joblib
+try:
+    import joblib
+except Exception as _e:
+    import streamlit as st  # safe import to display a friendly message
+    st.error(
+        "Missing dependency: joblib. Please ensure requirements.txt includes 'joblib' and redeploy/restart."
+    )
+    st.stop()
 import numpy as np
 import pandas as pd
 import streamlit as st
