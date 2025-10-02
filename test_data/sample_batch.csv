@@ -1,0 +1,3 @@
+age,gender,sysBP,pulsePressure,BMI,totChol,glucose,heartRate,cigsPerDay,currentSmoker,BPMeds,prevalentStroke,prevalentHyp,diabetes
+54,Male,132,42,27.5,240,95,80,0,No,No,No,Yes,No
+63,Female,146,56,31.2,280,110,76,20,Yes,No,No,Yes,Yes

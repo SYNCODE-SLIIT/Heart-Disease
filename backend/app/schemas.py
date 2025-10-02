@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel, Field, model_validator
+from typing import Optional, List, Dict, Any
 
 
 class PredictIn(BaseModel):
@@ -59,6 +59,7 @@ class PredictOut(BaseModel):
     model_version: str = Field(..., description="Model version")
 
     class Config:
+        protected_namespaces = ()
         json_schema_extra = {
             "example": {
                 "probability": 0.15,
@@ -77,6 +78,7 @@ class MetaOut(BaseModel):
     model_version: str = Field(..., description="Model version")
 
     class Config:
+        protected_namespaces = ()
         json_schema_extra = {
             "example": {
                 "expected_columns": ["age", "gender", "sysBP", "pulsePressure", "BMI", "totChol", "glucose", "heartRate", "cigsPerDay", "currentSmoker", "BPMeds", "prevalentStroke", "prevalentHyp", "diabetes"],
@@ -84,3 +86,71 @@ class MetaOut(BaseModel):
                 "model_version": "local-dev"
             }
         }
+
+
+# ---------------------- Batch JSON Contracts ----------------------
+
+class BatchRow(BaseModel):
+    """Canonical row expected by the model for batch inference.
+    All fields are required and must be already normalized on the client:
+    - gender: 'Male'|'Female'
+    - binary categoricals: 'Yes'|'No'
+    - numbers: numeric strings or numbers accepted, cast server-side
+    """
+
+    gender: str
+    currentSmoker: str
+    BPMeds: str
+    prevalentStroke: str
+    prevalentHyp: str
+    diabetes: str
+
+    age: int | float
+    cigsPerDay: int | float
+    totChol: int | float
+    sysBP: int | float
+    BMI: int | float
+    heartRate: int | float
+    glucose: int | float
+    pulsePressure: int | float
+
+    @model_validator(mode="after")
+    def _no_extra_keys(self) -> "BatchRow":
+        # Enforce strict 14 keys only
+        allowed = {
+            'gender', 'currentSmoker', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes',
+            'age', 'cigsPerDay', 'totChol', 'sysBP', 'BMI', 'heartRate', 'glucose', 'pulsePressure'
+        }
+        extras = set(self.model_fields_set) - allowed
+        if extras:
+            raise ValueError(f"Unexpected fields: {sorted(list(extras))}")
+        missing = allowed - set(self.model_fields_set)
+        if missing:
+            raise ValueError(f"Missing fields: {sorted(list(missing))}")
+        return self
+
+
+class BatchRequest(BaseModel):
+    rows: List[BatchRow]
+    threshold: float = Field(0.30, ge=0.0, le=1.0)
+
+
+class TopFactor(BaseModel):
+    feature: str
+    direction: str  # '+' or '-'
+    impact: float
+
+
+class BatchResultItem(BaseModel):
+    rowIndex: int
+    probability: float
+    label: str  # 'Yes'|'No'
+    topFactors: List[TopFactor]
+    messages: List[str] = []
+
+
+class BatchResponse(BaseModel):
+    count: int
+    results: List[BatchResultItem]
+    warnings: List[str] = []
+    errors: List[str] = []

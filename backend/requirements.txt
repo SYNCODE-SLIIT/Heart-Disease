@@ -1,7 +1,2 @@
-fastapi
-uvicorn[standard]
-pydantic>=2
-joblib
-pandas
-numpy
-scikit-learn
+# Use the root requirements as the single source of truth
+-r ../requirements.txt

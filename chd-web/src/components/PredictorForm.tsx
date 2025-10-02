@@ -72,11 +72,19 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
 
   // If currentSmoker is 'No', enforce cigsPerDay = 0 and disable field
   const currentSmokerValue = watch('currentSmoker');
+  const cigsValue = watch('cigsPerDay');
   useEffect(() => {
     if (currentSmokerValue === 'No') {
-      setValue('cigsPerDay', 0, { shouldValidate: true, shouldDirty: true });
+      setValue('cigsPerDay', 0, { shouldValidate: false, shouldDirty: true });
     }
   }, [currentSmokerValue, setValue]);
+
+  // If cigsPerDay > 0, enforce currentSmoker = 'Yes'
+  useEffect(() => {
+    if (typeof cigsValue === 'number' && cigsValue > 0 && currentSmokerValue !== 'Yes') {
+      setValue('currentSmoker', 'Yes', { shouldValidate: false, shouldDirty: true });
+    }
+  }, [cigsValue, currentSmokerValue, setValue]);
 
   const onSubmit: SubmitHandler<FormData> = async (data) => {
     setIsLoading(true);
@@ -145,7 +153,7 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 Gender *
               </label>
               <select
-                {...register('gender')}
+                {...register('gender', { setValueAs: (v) => (v === '' ? undefined : v) })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white"
               >
                 <option value="">Select gender</option>
@@ -300,7 +308,12 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 type="number"
                 step="0.1"
                 min={0}
-                {...register('cigsPerDay', { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
+                {...register('cigsPerDay', { valueAsNumber: true, setValueAs: (v) => {
+                  if (v === '' || v === null || typeof v === 'undefined') return undefined;
+                  const n = Number(v);
+                  if (Number.isNaN(n)) return undefined;
+                  return n < 0 ? 0 : n;
+                } })}
                 onKeyDown={preventMinus}
                 onPaste={preventInvalidPaste}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
@@ -317,7 +330,7 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 Current Smoker
               </label>
               <select
-                {...register('currentSmoker')}
+                {...register('currentSmoker', { setValueAs: (v) => (v === '' ? undefined : v) })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white"
               >
                 <option value="">Select option</option>
@@ -341,7 +354,7 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 On BP Medication
               </label>
               <select
-                {...register('BPMeds')}
+                {...register('BPMeds', { setValueAs: (v) => (v === '' ? undefined : v) })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white"
               >
                 <option value="">Select option</option>
@@ -358,7 +371,7 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 Previous Stroke
               </label>
               <select
-                {...register('prevalentStroke')}
+                {...register('prevalentStroke', { setValueAs: (v) => (v === '' ? undefined : v) })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white"
               >
                 <option value="">Select option</option>
@@ -375,7 +388,7 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 Hypertension
               </label>
               <select
-                {...register('prevalentHyp')}
+                {...register('prevalentHyp', { setValueAs: (v) => (v === '' ? undefined : v) })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white"
               >
                 <option value="">Select option</option>
@@ -392,7 +405,7 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 Diabetes
               </label>
               <select
-                {...register('diabetes')}
+                {...register('diabetes', { setValueAs: (v) => (v === '' ? undefined : v) })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white"
               >
                 <option value="">Select option</option>
