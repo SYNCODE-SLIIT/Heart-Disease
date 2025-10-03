@@ -81,7 +81,7 @@ class MockAuthProvider {
     return { user: mockUser, error: null };
   }
 
-  async signUp(email: string, password: string, metadata?: { name?: string }): Promise<{ user: User | null; error: AuthError | null }> {
+  async signUp(email: string, password: string, metadata?: { name?: string; role?: 'patient'|'doctor' }): Promise<{ user: User | null; error: AuthError | null }> {
     // Mock sign up - similar to sign in
     if (!email || !password) {
       return {
@@ -187,7 +187,7 @@ export const auth = {
   /**
    * Sign up with email and password
    */
-  async signUp(email: string, password: string, metadata?: { name?: string }): Promise<{ user: User | null; error: AuthError | null }> {
+  async signUp(email: string, password: string, metadata?: { name?: string; role?: 'patient'|'doctor' }): Promise<{ user: User | null; error: AuthError | null }> {
     if (supabase) {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -253,6 +253,7 @@ export function useAuth() {
     signUp: auth.signUp,
     signOut: auth.signOut,
     isAuthenticated: !!user,
+    role: (user?.user_metadata as any)?.role as ('patient'|'doctor'|undefined),
   };
 }
 

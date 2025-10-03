@@ -22,9 +22,11 @@ export default function Signup() {
     name?: string; 
     email?: string; 
     password?: string; 
-    confirmPassword?: string 
+    confirmPassword?: string,
+    role?: string,
   }>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [role, setRole] = useState<'patient'|'doctor'|''>('');
 
   const validateForm = (): boolean => {
     const newErrors: typeof errors = {};
@@ -49,6 +51,10 @@ export default function Signup() {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
+    if (!role) {
+      newErrors.role = 'Please select a role';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -63,7 +69,7 @@ export default function Signup() {
     setIsLoading(true);
 
     try {
-      const metadata = name ? { name } : undefined;
+  const metadata = { ...(name ? { name } : {}), ...(role ? { role } : {}) } as { name?: string; role?: 'patient'|'doctor' } | undefined;
       const { user, error } = await signUp(email, password, metadata);
 
       if (error) {
@@ -77,7 +83,8 @@ export default function Signup() {
         
         // Redirect after a short delay
         setTimeout(() => {
-          router.push('/my-data');
+          const uRole = (user.user_metadata as any)?.role as 'patient'|'doctor'|undefined;
+          router.push(uRole === 'doctor' ? '/profile' : '/my-data');
         }, 500);
       }
     } catch {
@@ -128,6 +135,28 @@ export default function Signup() {
                   autoComplete="name"
                   disabled={isLoading}
                 />
+
+                {/* Role selector */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                  <select
+                    value={role}
+                    onChange={(e) => {
+                      const v = e.target.value as 'patient'|'doctor'|'';
+                      setRole(v);
+                      if (errors.role) setErrors({ ...errors, role: undefined });
+                    }}
+                    disabled={isLoading}
+                    className={`w-full px-4 py-3 border ${errors.role ? 'border-red-500' : 'border-gray-300'} rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white`}
+                  >
+                    <option value="">Select your role</option>
+                    <option value="patient">Patient</option>
+                    <option value="doctor">Doctor</option>
+                  </select>
+                  {errors.role && (
+                    <p className="text-red-600 text-sm mt-1">{errors.role}</p>
+                  )}
+                </div>
 
                 <Input
                   type="email"

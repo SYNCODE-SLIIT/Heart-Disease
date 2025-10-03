@@ -64,7 +64,7 @@ export default function Login() {
         
         // Redirect after a short delay
         setTimeout(() => {
-          router.push(next);
+          router.push(next || '/profile');
         }, 500);
       }
     } catch {
