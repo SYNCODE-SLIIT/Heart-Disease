@@ -353,68 +353,7 @@ export default function BulkPredictPanel() {
               </tbody>
             </table>
           </div>
-          {user && (
-            <div className="mt-4 flex items-center gap-3">
-              <Button
-                variant="primary"
-                size="md"
-                isLoading={isSaving}
-                // Enabled when there are prediction results OR cleaned rows available
-                disabled={isSaving || !((predictRes && predictRes.results && predictRes.results.length > 0) || (norm && norm.rows && norm.rows.length > 0))}
-                onClick={async () => {
-                  setIsSaving(true);
-                  setSaveStatus(null);
-                  try {
-                    const rows = mergedRows();
-                    let csv: string | null = null;
-                    let filenameHint = 'batch_predictions';
-
-                    if (rows.length > 0) {
-                      // User ran predictions — save merged rows (predictions + inputs)
-                      csv = Papa.unparse(rows);
-                      filenameHint = 'batch_predictions';
-                    } else if (norm && norm.rows && norm.rows.length > 0) {
-                      // No predictions yet, but cleaned preview exists — save the cleaned input rows
-                      csv = cleanedCsv(norm.rows);
-                      filenameHint = 'cleaned_data';
-                    }
-
-                    if (!csv) {
-                      setSaveStatus('No prediction or cleaned rows to save — run predictions or upload a file first.');
-                      return;
-                    }
-
-                    // If Supabase client is not configured (dev/local), fall back to saving locally
-                    if (!supabase) {
-                      if (typeof window !== 'undefined') {
-                        try {
-                          console.debug('Storing pending CSV to localStorage', { key: 'heartsense_pending_csv', size: csv.length, filenameHint });
-                          localStorage.setItem('heartsense_pending_csv', String(csv));
-                          localStorage.setItem('heartsense_pending_filename', filenameHint);
-                          setSaveStatus('Saved locally. Configure Supabase (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY) to persist to your project.');
-                        } catch (err) {
-                          console.error('Failed to write pending CSV to localStorage', err);
-                          setSaveStatus('Failed to save locally');
-                        }
-                      } else {
-                        setSaveStatus('Supabase is not configured and localStorage is not available.');
-                      }
-                      return;
-                    }
-
-                    // Normal path: upload to Supabase storage
-                    await uploadUserCSV(user!, csv, filenameHint);
-                    setSaveStatus('Saved to your profile');
-                  } catch (e: any) {
-                    setSaveStatus(e?.message || 'Failed to save');
-                  } finally {
-                    setIsSaving(false);
-                  }
-                }}
-              >Save results to profile</Button>
-              {saveStatus && <div className="text-sm text-gray-600">{saveStatus}</div>}
-            </div>
-          )}
+          {/* Save cleaned preview removed — saving now occurs from the Results section and only saves prediction results (merged rows) */}
         </div>
       )}
 
@@ -463,6 +402,80 @@ export default function BulkPredictPanel() {
               >
                 Download
               </button>
+              {/* Save to profile button - only available when user is signed in and predictions exist */}
+              {user && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsSaving(true);
+                    setSaveStatus(null);
+                    try {
+                      const rows = mergedRows();
+                      if (!rows || rows.length === 0) {
+                        setSaveStatus('No prediction results to save. Run predictions first.');
+                        return;
+                      }
+
+                      // Try to fetch model_version from the API meta endpoint; fallback to 'local-dev'
+                      let modelVersion = 'local-dev';
+                      try {
+                        const metaRes = await fetch((process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000') + '/api/v1/meta');
+                        if (metaRes.ok) {
+                          const metaJson = await metaRes.json();
+                          if (metaJson?.model_version) modelVersion = String(metaJson.model_version);
+                        }
+                      } catch (e) {
+                        console.debug('Could not fetch model meta for model_version, using fallback', e);
+                      }
+
+                      // Augment rows with numeric prediction, threshold and model_version to match single-patient format
+                      const enriched = rows.map((r) => {
+                        const out = { ...r } as Record<string, unknown>;
+                        // If label exists ('Yes'/'No'), derive numeric prediction
+                        if (typeof out.label === 'string') {
+                          out.prediction = out.label === 'Yes' ? 1 : 0;
+                        } else if (typeof out.prediction === 'undefined') {
+                          // keep existing prediction if present, else set to 0
+                          out.prediction = 0;
+                        }
+                        out.threshold = threshold;
+                        out.model_version = modelVersion;
+                        return out;
+                      });
+
+                      const csv = Papa.unparse(enriched);
+                      const filenameHint = 'batch_predictions';
+
+                      if (!supabase) {
+                        if (typeof window !== 'undefined') {
+                          try {
+                            localStorage.setItem('heartsense_pending_csv', String(csv));
+                            localStorage.setItem('heartsense_pending_filename', filenameHint);
+                            setSaveStatus('Saved locally. Configure Supabase (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY) to persist to your project.');
+                          } catch (err) {
+                            console.error('Failed to write pending CSV to localStorage', err);
+                            setSaveStatus('Failed to save locally');
+                          }
+                        } else {
+                          setSaveStatus('Supabase is not configured and localStorage is not available.');
+                        }
+                        return;
+                      }
+
+                      await uploadUserCSV(user!, csv, filenameHint);
+                      setSaveStatus('Saved to your profile');
+                    } catch (e: any) {
+                      setSaveStatus(e?.message || 'Failed to save');
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                  disabled={isSaving || !(predictRes && predictRes.results && predictRes.results.length > 0)}
+                  className="ml-3 px-4 py-2 bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-700 rounded-xl"
+                >
+                  {isSaving ? 'Saving…' : 'Save to profile'}
+                </button>
+              )}
             </div>
           </div>
           {!user && (
