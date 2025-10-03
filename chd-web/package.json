@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
+    "@supabase/supabase-js": "^2.58.0",
     "@tanstack/react-query": "^5.90.2",
     "next": "15.5.4",
     "papaparse": "^5.4.1",
