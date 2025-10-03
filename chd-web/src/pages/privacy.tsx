@@ -15,8 +15,9 @@ export default function Privacy() {
       <div className="min-h-screen flex flex-col bg-gray-50">
         <Nav />
         
-        <main className="flex-grow py-12">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <main className="flex-grow py-8">
+          {/* Shared narrow content wrapper: keep in sync with about page */}
+          <div className="max-w-3xl mx-auto px-3 sm:px-4 lg:px-6">
             {/* Header */}
             <div className="text-center mb-12">
               <h1 className="text-4xl font-bold text-gray-900 mb-4">
