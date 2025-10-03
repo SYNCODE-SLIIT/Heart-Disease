@@ -1,23 +1,18 @@
-import Document, { Html, Head, Main, NextScript, DocumentContext } from 'next/document'
+import { Html, Head, Main, NextScript } from 'next/document';
 
-class MyDocument extends Document {
-	static async getInitialProps(ctx: DocumentContext) {
-		const initialProps = await Document.getInitialProps(ctx)
-		return { ...initialProps }
-	}
-
-	render() {
-		return (
-			<Html lang="en">
-				<Head />
-				<body>
-					<Main />
-					<NextScript />
-				</body>
-			</Html>
-		)
-	}
+// Custom Document for Pages Router
+// Note: Keep this minimal; heavy logic should live in _app.tsx
+export default function Document() {
+	return (
+		<Html lang="en">
+			<Head>
+				{/* Place any global meta, preload links, or inline theme scripts here if needed */}
+			</Head>
+			<body>
+				<Main />
+				<NextScript />
+			</body>
+		</Html>
+	);
 }
-
-export default MyDocument
 
