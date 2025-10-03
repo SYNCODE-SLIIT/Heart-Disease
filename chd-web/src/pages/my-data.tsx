@@ -6,7 +6,7 @@ import { useAuth } from '../lib/supabaseClient';
 import Nav from '../components/Nav';
 import Footer from '../components/Footer';
 import Button from '../components/ui/Button';
-import { listUserCSVs, downloadCSV, type UserCsvObject } from '../lib/storage';
+import { listUserCSVs, downloadCSV, deleteUserCSV, type UserCsvObject } from '../lib/storage';
 import Papa from 'papaparse';
 
 export default function MyData() {
@@ -92,7 +92,6 @@ export default function MyData() {
                       <tr className="text-left text-gray-600">
                         <th className="px-3 py-2 border-b">File</th>
                         <th className="px-3 py-2 border-b">Updated</th>
-                        <th className="px-3 py-2 border-b">Size</th>
                         <th className="px-3 py-2 border-b text-right">Actions</th>
                       </tr>
                     </thead>
@@ -101,30 +100,49 @@ export default function MyData() {
                         <tr key={r.path}>
                           <td className="px-3 py-2 border-b">{r.name}</td>
                           <td className="px-3 py-2 border-b">{r.updated_at ? new Date(r.updated_at).toLocaleString() : '—'}</td>
-                          <td className="px-3 py-2 border-b">{typeof r.size === 'number' ? `${(r.size/1024).toFixed(1)} KB` : '—'}</td>
                           <td className="px-3 py-2 border-b text-right">
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              isLoading={downloading === r.path}
-                              onClick={async () => {
-                                try {
-                                  setDownloading(r.path);
-                                  const text = await downloadCSV(r.path);
-                                  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
-                                  const url = URL.createObjectURL(blob);
-                                  const a = document.createElement('a');
-                                  a.href = url;
-                                  a.download = r.name || 'data.csv';
-                                  document.body.appendChild(a);
-                                  a.click();
-                                  document.body.removeChild(a);
-                                  URL.revokeObjectURL(url);
-                                } finally {
-                                  setDownloading(null);
-                                }
-                              }}
-                            >Download</Button>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                isLoading={downloading === r.path}
+                                onClick={async () => {
+                                  try {
+                                    setDownloading(r.path);
+                                    const text = await downloadCSV(r.path);
+                                    const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = r.name || 'data.csv';
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    URL.revokeObjectURL(url);
+                                  } finally {
+                                    setDownloading(null);
+                                  }
+                                }}
+                              >Download</Button>
+
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={async () => {
+                                  if (!confirm(`Delete ${r.name || r.path}? This cannot be undone.`)) return;
+                                  try {
+                                    setErr(null);
+                                    // Optimistic UI: remove from list locally
+                                    setRows((prev) => prev ? prev.filter(p => p.path !== r.path) : prev);
+                                    await deleteUserCSV(r.path);
+                                  } catch (e: any) {
+                                    setErr(e?.message || 'Failed to delete file');
+                                    // Re-load listing to ensure UI consistency
+                                    try { const list = await listUserCSVs(user); setRows(list); } catch(_){}
+                                  }
+                                }}
+                              ><span className="text-red-600">Delete</span></Button>
+                            </div>
                           </td>
                         </tr>
                       ))}

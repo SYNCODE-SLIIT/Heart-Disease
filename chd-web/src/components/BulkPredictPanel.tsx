@@ -1,12 +1,13 @@
 "use client";
 
 import { useRef, useState } from 'react';
+import Button from './ui/Button';
 import { useMutation } from '@tanstack/react-query';
 // No direct file upload API now; using JSON /batch
 import { parseFile, normalizeBatch, cleanedCsv, type NormalizeResult } from '../lib/batchNormalize';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { useAuth } from '../lib/supabaseClient';
+import { useAuth, supabase } from '../lib/supabaseClient';
 import { uploadUserCSV } from '../lib/storage';
 
 
@@ -31,6 +32,8 @@ export default function BulkPredictPanel() {
   } | null>(null);
   const [exportFormat, setExportFormat] = useState<'csv'|'xlsx'>('xlsx');
   const [showFormatMenu, setShowFormatMenu] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const mergedRows = (): Record<string, unknown>[] => {
     if (!norm || !predictRes) return [];
@@ -110,18 +113,6 @@ export default function BulkPredictPanel() {
       }
       const data = await response.json();
       setPredictRes(data);
-      // Persist merged output as CSV to the user's storage space
-      try {
-        if (user) {
-          const rows = mergedRows();
-          if (rows.length) {
-            const csv = Papa.unparse(rows);
-            await uploadUserCSV(user, csv, 'batch_predictions');
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to save batch CSV:', e);
-      }
       return data;
     },
     onError: (e: unknown) => {
@@ -362,6 +353,68 @@ export default function BulkPredictPanel() {
               </tbody>
             </table>
           </div>
+          {user && (
+            <div className="mt-4 flex items-center gap-3">
+              <Button
+                variant="primary"
+                size="md"
+                isLoading={isSaving}
+                // Enabled when there are prediction results OR cleaned rows available
+                disabled={isSaving || !((predictRes && predictRes.results && predictRes.results.length > 0) || (norm && norm.rows && norm.rows.length > 0))}
+                onClick={async () => {
+                  setIsSaving(true);
+                  setSaveStatus(null);
+                  try {
+                    const rows = mergedRows();
+                    let csv: string | null = null;
+                    let filenameHint = 'batch_predictions';
+
+                    if (rows.length > 0) {
+                      // User ran predictions — save merged rows (predictions + inputs)
+                      csv = Papa.unparse(rows);
+                      filenameHint = 'batch_predictions';
+                    } else if (norm && norm.rows && norm.rows.length > 0) {
+                      // No predictions yet, but cleaned preview exists — save the cleaned input rows
+                      csv = cleanedCsv(norm.rows);
+                      filenameHint = 'cleaned_data';
+                    }
+
+                    if (!csv) {
+                      setSaveStatus('No prediction or cleaned rows to save — run predictions or upload a file first.');
+                      return;
+                    }
+
+                    // If Supabase client is not configured (dev/local), fall back to saving locally
+                    if (!supabase) {
+                      if (typeof window !== 'undefined') {
+                        try {
+                          console.debug('Storing pending CSV to localStorage', { key: 'heartsense_pending_csv', size: csv.length, filenameHint });
+                          localStorage.setItem('heartsense_pending_csv', String(csv));
+                          localStorage.setItem('heartsense_pending_filename', filenameHint);
+                          setSaveStatus('Saved locally. Configure Supabase (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY) to persist to your project.');
+                        } catch (err) {
+                          console.error('Failed to write pending CSV to localStorage', err);
+                          setSaveStatus('Failed to save locally');
+                        }
+                      } else {
+                        setSaveStatus('Supabase is not configured and localStorage is not available.');
+                      }
+                      return;
+                    }
+
+                    // Normal path: upload to Supabase storage
+                    await uploadUserCSV(user!, csv, filenameHint);
+                    setSaveStatus('Saved to your profile');
+                  } catch (e: any) {
+                    setSaveStatus(e?.message || 'Failed to save');
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }}
+              >Save results to profile</Button>
+              {saveStatus && <div className="text-sm text-gray-600">{saveStatus}</div>}
+            </div>
+          )}
         </div>
       )}
 
