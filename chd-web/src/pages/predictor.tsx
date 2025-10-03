@@ -114,9 +114,9 @@ export default function Predictor() {
                       You don’t need an account to get predictions. Sign in only if you want to save your results to your profile.
                     </div>
                   )}
-                  <PredictorForm onResult={async (r) => {
+                  <PredictorForm onResult={(r) => {
                     handleResult(r);
-                    // Try to capture the last submitted form values from DOM; as a fallback we store just the output
+                    // Capture the last submitted form values from DOM but DO NOT auto-save.
                     try {
                       const formEl = document.querySelector('form');
                       const fd = formEl ? new FormData(formEl as HTMLFormElement) : null;
@@ -125,10 +125,8 @@ export default function Predictor() {
                         fd.forEach((v, k) => { obj[k] = v; });
                       }
                       setLastInput(obj);
-                      await persistSingle(obj, r);
                     } catch {
                       setLastInput(null);
-                      await persistSingle({}, r);
                     }
                   }} />
                 </div>
@@ -151,8 +149,13 @@ export default function Predictor() {
                             const csv = Papa.unparse([row]);
                             if (!isAuthenticated || !user) {
                               if (typeof window !== 'undefined') {
-                                localStorage.setItem('heartsense_pending_csv', csv);
-                                localStorage.setItem('heartsense_pending_filename', 'single_prediction');
+                                try {
+                                  console.debug('Storing pending single CSV to localStorage', { key: 'heartsense_pending_csv', size: csv.length });
+                                  localStorage.setItem('heartsense_pending_csv', String(csv));
+                                  localStorage.setItem('heartsense_pending_filename', 'single_prediction');
+                                } catch (err) {
+                                  console.error('Failed to write pending CSV to localStorage', err);
+                                }
                                 window.location.href = '/login?next=/predictor';
                               }
                               return;

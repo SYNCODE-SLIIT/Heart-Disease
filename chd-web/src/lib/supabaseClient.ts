@@ -21,12 +21,30 @@ class MockAuthProvider {
   constructor() {
     // Try to restore user from localStorage
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('mock_auth_user');
+          const stored = localStorage.getItem('heartsense_mock_user');
       if (stored) {
         try {
-          this.currentUser = JSON.parse(stored);
-        } catch {
-          console.warn('Failed to parse stored user');
+          // Defensive parse: stored should be a JSON string. If it's something like
+          // "[object Object]" or otherwise not JSON, avoid throwing and clear it.
+          if (typeof stored === 'string') {
+            const trimmed = stored.trim();
+                if (trimmed === '[object Object]' || trimmed === 'undefined' || trimmed === 'null') {
+                  console.warn('Found non-JSON mock user value in localStorage, clearing:', trimmed);
+                  localStorage.removeItem('heartsense_mock_user');
+            } else {
+              // Only attempt JSON.parse if it looks like JSON
+              if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                this.currentUser = JSON.parse(stored);
+              } else {
+                // Not JSON — log and clear to avoid downstream parse errors
+                console.warn('Stored mock_auth_user is not JSON; clearing stored value.', stored);
+                localStorage.removeItem('mock_auth_user');
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to parse stored user', err);
+          try { localStorage.removeItem('mock_auth_user'); } catch(e){}
         }
       }
     }
