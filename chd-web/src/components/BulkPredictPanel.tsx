@@ -6,9 +6,12 @@ import { useMutation } from '@tanstack/react-query';
 import { parseFile, normalizeBatch, cleanedCsv, type NormalizeResult } from '../lib/batchNormalize';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import { useAuth } from '../lib/supabaseClient';
+import { uploadUserCSV } from '../lib/storage';
 
 
 export default function BulkPredictPanel() {
+  const { user } = useAuth();
   const [threshold, setThreshold] = useState(0.3);
   const [file, setFile] = useState<File | null>(null);
   const [sheetNames, setSheetNames] = useState<string[] | undefined>();
@@ -107,6 +110,18 @@ export default function BulkPredictPanel() {
       }
       const data = await response.json();
       setPredictRes(data);
+      // Persist merged output as CSV to the user's storage space
+      try {
+        if (user) {
+          const rows = mergedRows();
+          if (rows.length) {
+            const csv = Papa.unparse(rows);
+            await uploadUserCSV(user, csv, 'batch_predictions');
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to save batch CSV:', e);
+      }
       return data;
     },
     onError: (e: unknown) => {
@@ -397,6 +412,11 @@ export default function BulkPredictPanel() {
               </button>
             </div>
           </div>
+          {!user && (
+            <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
+              Tip: Sign in to automatically save these batch results to your profile.
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>

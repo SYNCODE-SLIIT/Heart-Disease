@@ -74,6 +74,47 @@ Sign Out → Clears localStorage → Updates navbar → Redirect home
 Set env vars → Auto-detected → Real Supabase calls → Full auth flow
 ```
 
+### Roles and Storage (New)
+
+- Roles supported: `patient` and `doctor`. Role is stored in `user_metadata.role` at signup.
+- Secure Storage Bucket: `heartsense-data`
+  - Each user’s files are stored under prefix `${user.id}/...`
+  - Frontend uploads single prediction and batch results as CSVs automatically
+  - Profile page lists, previews, and downloads user CSVs
+
+Recommended Supabase SQL (run once):
+
+```sql
+-- Create storage bucket
+insert into storage.buckets (id, name, public) values ('heartsense-data', 'heartsense-data', false)
+on conflict (id) do nothing;
+
+-- RLS policies to restrict access to own files only
+-- List: allow listing only within own folder
+create policy if not exists "Users can list their own files"
+on storage.objects for select
+to authenticated
+using (bucket_id = 'heartsense-data' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Upload: allow users to upload only to their own folder
+create policy if not exists "Users can upload to their folder"
+on storage.objects for insert
+to authenticated
+with check (
+  bucket_id = 'heartsense-data' and
+  (storage.foldername(name))[1] = auth.uid()::text
+);
+
+-- Download: allow users to download their files
+create policy if not exists "Users can download their files"
+on storage.objects for select
+to authenticated
+using (bucket_id = 'heartsense-data' and (storage.foldername(name))[1] = auth.uid()::text);
+```
+
+Notes:
+- Doctors and patients both only see their own data by default. To allow doctors to view patient data, implement a mapping table with explicit grants and adjust policies accordingly.
+
 ---
 
 ## 📄 Pages & Routes

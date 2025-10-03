@@ -16,6 +16,7 @@ export default function Nav() {
     { name: 'Home', href: '/' },
     { name: 'Predictor', href: '/predictor' },
     { name: 'My Data', href: '/my-data', authRequired: true },
+    { name: 'Profile', href: '/profile', authRequired: true },
     { name: 'About', href: '/about' },
     { name: 'Privacy', href: '/privacy' },
   ];
@@ -28,9 +29,10 @@ export default function Nav() {
   };
 
   const handleMyDataClick = (e: React.MouseEvent, href: string) => {
-    if (!isAuthenticated && href === '/my-data') {
+    if (!isAuthenticated && (href === '/my-data' || href === '/profile')) {
       e.preventDefault();
-      router.push('/login?next=/my-data');
+      const next = href;
+      router.push(`/login?next=${encodeURIComponent(next)}`);
     }
   };
 
@@ -150,6 +152,13 @@ export default function Nav() {
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                     >
                       My Data
+                    </Link>
+                    <Link
+                      href="/profile"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      Profile
                     </Link>
                     
                     <button
