@@ -1,39 +1,27 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import Nav from '../components/Nav';
 import Footer from '../components/Footer';
 import Button from '../components/ui/Button';
 import { useAuth } from '../lib/supabaseClient';
-import { listUserCSVs, downloadCSV, type UserCsvObject } from '../lib/storage';
-import Papa from 'papaparse';
+import { supabase } from '../lib/supabaseClient';
 
 export default function Profile() {
   const router = useRouter();
   const { user, loading } = useAuth();
-  const [rows, setRows] = useState<UserCsvObject[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [downloading, setDownloading] = useState<string | null>(null);
-  const [combined, setCombined] = useState<Record<string, string>[] | null>(null);
-  const [isCombining, setIsCombining] = useState(false);
-  const [page, setPage] = useState(1);
-  const pageSize = 25;
+  const [isUploading, setIsUploading] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login?next=/profile');
   }, [loading, user, router]);
 
   useEffect(() => {
-    const load = async () => {
-      if (!user) return;
-      try {
-        const list = await listUserCSVs(user);
-        setRows(list);
-      } catch (e: any) {
-        setErr(e?.message || 'Failed to load your files');
-      }
-    };
-    load();
+    if (user?.user_metadata?.avatar_url) {
+      setAvatarUrl(user.user_metadata.avatar_url as string);
+    }
   }, [user]);
 
   if (loading || (!user && !err)) {
@@ -52,8 +40,8 @@ export default function Profile() {
   return (
     <>
       <Head>
-        <title>Profile - HeartSense</title>
-        <meta name="description" content="Your saved CSV predictions and uploads" />
+  <title>My Profile - HeartSense</title>
+  <meta name="description" content="Manage your profile information" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/heart_icon.svg" />
       </Head>
@@ -63,7 +51,7 @@ export default function Profile() {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="mb-8">
               <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
-              <p className="text-gray-600">View and download your saved CSV data.</p>
+              <p className="text-gray-600">View and update your profile information.</p>
             </div>
 
             {err && (
@@ -71,148 +59,70 @@ export default function Profile() {
             )}
 
             <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">Saved CSV Files</h2>
-                <Button variant="secondary" size="sm" onClick={() => router.push('/predictor')}>New Assessment</Button>
-              </div>
-              {rows && rows.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-gray-600">
-                        <th className="px-3 py-2 border-b">File</th>
-                        <th className="px-3 py-2 border-b">Updated</th>
-                        <th className="px-3 py-2 border-b">Size</th>
-                        <th className="px-3 py-2 border-b text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((r) => (
-                        <tr key={r.path}>
-                          <td className="px-3 py-2 border-b">{r.name}</td>
-                          <td className="px-3 py-2 border-b">{r.updated_at ? new Date(r.updated_at).toLocaleString() : '—'}</td>
-                          <td className="px-3 py-2 border-b">{typeof r.size === 'number' ? `${(r.size/1024).toFixed(1)} KB` : '—'}</td>
-                          <td className="px-3 py-2 border-b text-right">
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              isLoading={downloading === r.path}
-                              onClick={async () => {
-                                try {
-                                  setDownloading(r.path);
-                                  const text = await downloadCSV(r.path);
-                                  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
-                                  const url = URL.createObjectURL(blob);
-                                  const a = document.createElement('a');
-                                  a.href = url;
-                                  a.download = r.name || 'data.csv';
-                                  document.body.appendChild(a);
-                                  a.click();
-                                  document.body.removeChild(a);
-                                  URL.revokeObjectURL(url);
-                                } finally {
-                                  setDownloading(null);
-                                }
-                              }}
-                            >Download</Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-gray-600">No files yet. Run a single or batch prediction to save results.</div>
-              )}
-            </div>
-
-            {/* Combined Table */}
-            {rows && rows.length > 0 && (
-              <div className="mt-8 bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900">All Data (Combined)</h2>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      isLoading={isCombining}
-                      onClick={async () => {
-                        if (!rows) return;
-                        setIsCombining(true);
-                        setErr(null);
-                        try {
-                          const all: Record<string, string>[] = [];
-                          for (const r of rows) {
-                            const text = await downloadCSV(r.path);
-                            const parsed = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
-                            if (parsed.data) all.push(...parsed.data);
-                          }
-                          setCombined(all);
-                          setPage(1);
-                        } catch (e: any) {
-                          setErr(e?.message || 'Failed to build combined table');
-                        } finally {
-                          setIsCombining(false);
-                        }
-                      }}
-                    >Load Combined Table</Button>
-                    {combined && combined.length > 0 && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => {
-                          const csv = Papa.unparse(combined);
-                          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = 'heartsense_combined.csv';
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
-                          URL.revokeObjectURL(url);
-                        }}
-                      >Export CSV</Button>
+              <div className="flex flex-col md:flex-row gap-6 items-center md:items-start">
+                <div className="flex-shrink-0">
+                  <div className="w-28 h-28 rounded-full overflow-hidden bg-red-100 flex items-center justify-center text-red-700 text-3xl font-bold">
+                    {avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      (user.email?.[0] || '?').toUpperCase()
                     )}
                   </div>
                 </div>
-                {combined && (
-                  combined.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-gray-600">
-                            {Object.keys(combined[0]).slice(0, 30).map((h) => (
-                              <th key={h} className="px-3 py-2 border-b">{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {combined.slice((page-1)*pageSize, page*pageSize).map((row, idx) => (
-                            <tr key={idx}>
-                              {Object.keys(combined[0]).slice(0, 30).map((h) => (
-                                <td key={h} className="px-3 py-2 border-b">{row[h] ?? ''}</td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <div className="flex items-center justify-between mt-4 text-sm text-gray-600">
-                        <div>
-                          Showing {(page-1)*pageSize+1}-{Math.min(page*pageSize, combined.length)} of {combined.length}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm" disabled={page===1} onClick={() => setPage((p)=>Math.max(1,p-1))}>Prev</Button>
-                          <Button variant="ghost" size="sm" disabled={page*pageSize>=combined.length} onClick={() => setPage((p)=>p+1)}>Next</Button>
-                        </div>
-                      </div>
+                <div className="flex-1 w-full">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-gray-500">Full name</div>
+                      <div className="text-base font-medium text-gray-900">{(user.user_metadata as any)?.name || '—'}</div>
                     </div>
-                  ) : (
-                    <div className="text-gray-600">No rows found in your CSVs.</div>
-                  )
-                )}
+                    <div>
+                      <div className="text-sm text-gray-500">Email</div>
+                      <div className="text-base font-medium text-gray-900">{user.email}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-500">Role</div>
+                      <div className="text-base font-medium text-gray-900">{(user.user_metadata as any)?.role || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-500">User ID</div>
+                      <div className="text-xs font-mono text-gray-700 break-all">{user.id}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Upload profile picture</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f || !supabase) return;
+                          try {
+                            setIsUploading(true);
+                            const path = `${user.id}/${Date.now()}_${f.name}`;
+                            const { error: upErr } = await supabase.storage.from('avatars').upload(path, f, { upsert: false, cacheControl: '3600' });
+                            if (upErr) throw upErr;
+                            const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+                            const publicUrl = data.publicUrl;
+                            const { error: uErr } = await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
+                            if (uErr) throw uErr;
+                            setAvatarUrl(publicUrl);
+                          } catch (e: any) {
+                            setErr(e?.message || 'Failed to upload avatar');
+                          } finally {
+                            setIsUploading(false);
+                          }
+                        }}
+                      />
+                      <Button variant="secondary" size="sm" disabled={isUploading}>{isUploading ? 'Uploading…' : 'Choose file'}</Button>
+                    </div>
+                    
+                  </div>
+                </div>
               </div>
-            )}
+            </div>
           </div>
         </main>
         <Footer />

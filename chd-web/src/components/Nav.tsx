@@ -15,8 +15,6 @@ export default function Nav() {
   const navItems = [
     { name: 'Home', href: '/' },
     { name: 'Predictor', href: '/predictor' },
-    { name: 'My Data', href: '/my-data', authRequired: true },
-    { name: 'Profile', href: '/profile', authRequired: true },
     { name: 'About', href: '/about' },
     { name: 'Privacy', href: '/privacy' },
   ];
@@ -233,6 +231,20 @@ export default function Nav() {
                     <p className="text-xs text-gray-500">Signed in as</p>
                     <p className="text-sm font-medium text-gray-900 truncate">{user?.email}</p>
                   </div>
+                  <Link
+                    href="/my-data"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    My Data
+                  </Link>
+                  <Link
+                    href="/profile"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    Profile
+                  </Link>
                   <button
                     onClick={() => {
                       handleSignOut();
