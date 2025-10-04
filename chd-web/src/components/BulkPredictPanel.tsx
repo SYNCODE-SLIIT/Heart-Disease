@@ -1,12 +1,13 @@
 "use client";
 
 import { useRef, useState } from 'react';
+import Button from './ui/Button';
 import { useMutation } from '@tanstack/react-query';
 // No direct file upload API now; using JSON /batch
 import { parseFile, normalizeBatch, cleanedCsv, type NormalizeResult } from '../lib/batchNormalize';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { useAuth } from '../lib/supabaseClient';
+import { useAuth, supabase } from '../lib/supabaseClient';
 import { uploadUserCSV } from '../lib/storage';
 
 
@@ -31,6 +32,8 @@ export default function BulkPredictPanel() {
   } | null>(null);
   const [exportFormat, setExportFormat] = useState<'csv'|'xlsx'>('xlsx');
   const [showFormatMenu, setShowFormatMenu] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const mergedRows = (): Record<string, unknown>[] => {
     if (!norm || !predictRes) return [];
@@ -110,18 +113,6 @@ export default function BulkPredictPanel() {
       }
       const data = await response.json();
       setPredictRes(data);
-      // Persist merged output as CSV to the user's storage space
-      try {
-        if (user) {
-          const rows = mergedRows();
-          if (rows.length) {
-            const csv = Papa.unparse(rows);
-            await uploadUserCSV(user, csv, 'batch_predictions');
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to save batch CSV:', e);
-      }
       return data;
     },
     onError: (e: unknown) => {
@@ -362,6 +353,7 @@ export default function BulkPredictPanel() {
               </tbody>
             </table>
           </div>
+          {/* Save cleaned preview removed — saving now occurs from the Results section and only saves prediction results (merged rows) */}
         </div>
       )}
 
@@ -410,6 +402,80 @@ export default function BulkPredictPanel() {
               >
                 Download
               </button>
+              {/* Save to profile button - only available when user is signed in and predictions exist */}
+              {user && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsSaving(true);
+                    setSaveStatus(null);
+                    try {
+                      const rows = mergedRows();
+                      if (!rows || rows.length === 0) {
+                        setSaveStatus('No prediction results to save. Run predictions first.');
+                        return;
+                      }
+
+                      // Try to fetch model_version from the API meta endpoint; fallback to 'local-dev'
+                      let modelVersion = 'local-dev';
+                      try {
+                        const metaRes = await fetch((process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000') + '/api/v1/meta');
+                        if (metaRes.ok) {
+                          const metaJson = await metaRes.json();
+                          if (metaJson?.model_version) modelVersion = String(metaJson.model_version);
+                        }
+                      } catch (e) {
+                        console.debug('Could not fetch model meta for model_version, using fallback', e);
+                      }
+
+                      // Augment rows with numeric prediction, threshold and model_version to match single-patient format
+                      const enriched = rows.map((r) => {
+                        const out = { ...r } as Record<string, unknown>;
+                        // If label exists ('Yes'/'No'), derive numeric prediction
+                        if (typeof out.label === 'string') {
+                          out.prediction = out.label === 'Yes' ? 1 : 0;
+                        } else if (typeof out.prediction === 'undefined') {
+                          // keep existing prediction if present, else set to 0
+                          out.prediction = 0;
+                        }
+                        out.threshold = threshold;
+                        out.model_version = modelVersion;
+                        return out;
+                      });
+
+                      const csv = Papa.unparse(enriched);
+                      const filenameHint = 'batch_predictions';
+
+                      if (!supabase) {
+                        if (typeof window !== 'undefined') {
+                          try {
+                            localStorage.setItem('heartsense_pending_csv', String(csv));
+                            localStorage.setItem('heartsense_pending_filename', filenameHint);
+                            setSaveStatus('Saved locally. Configure Supabase (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY) to persist to your project.');
+                          } catch (err) {
+                            console.error('Failed to write pending CSV to localStorage', err);
+                            setSaveStatus('Failed to save locally');
+                          }
+                        } else {
+                          setSaveStatus('Supabase is not configured and localStorage is not available.');
+                        }
+                        return;
+                      }
+
+                      await uploadUserCSV(user!, csv, filenameHint);
+                      setSaveStatus('Saved to your profile');
+                    } catch (e: any) {
+                      setSaveStatus(e?.message || 'Failed to save');
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                  disabled={isSaving || !(predictRes && predictRes.results && predictRes.results.length > 0)}
+                  className="ml-3 px-4 py-2 bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-700 rounded-xl"
+                >
+                  {isSaving ? 'Saving…' : 'Save to profile'}
+                </button>
+              )}
             </div>
           </div>
           {!user && (

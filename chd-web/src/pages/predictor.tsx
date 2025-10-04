@@ -5,6 +5,7 @@ import Footer from '../components/Footer';
 import PredictorForm from '../components/PredictorForm';
 import BulkPredictPanel from '../components/BulkPredictPanel';
 import ProbabilityCard from '../components/ProbabilityCard';
+import Toast, { useToast } from '../components/ui/Toast';
 import { PredictOut } from '../lib/types';
 import { useAuth } from '../lib/supabaseClient';
 import { uploadUserCSV } from '../lib/storage';
@@ -15,11 +16,13 @@ export default function Predictor() {
   const [activeTab, setActiveTab] = useState<'single' | 'batch'>('single');
   const { user, isAuthenticated } = useAuth();
   const [lastInput, setLastInput] = useState<Record<string, unknown> | null>(null);
-  const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const { toasts, removeToast, success, error: showError } = useToast();
 
   const handleResult = (newResult: PredictOut) => {
     setResult(newResult);
+    setSaved(false); // Reset saved state when new result comes in
     // Scroll to result
     setTimeout(() => {
       const resultElement = document.getElementById('prediction-result');
@@ -27,14 +30,6 @@ export default function Predictor() {
         resultElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }, 100);
-  };
-
-  // Persist latest single prediction input+output to storage as CSV when available
-  const persistSingle = async (input: Record<string, unknown>, output: PredictOut) => {
-    if (!user) return;
-    const row = { ...input, probability: output.probability, prediction: output.prediction, threshold: output.threshold, model_version: output.model_version };
-    const csv = Papa.unparse([row]);
-    await uploadUserCSV(user, csv, 'single_prediction');
   };
 
   // After login, if we have a pending CSV in localStorage, upload it
@@ -50,9 +45,9 @@ export default function Predictor() {
           setSaving(true);
           const fname = localStorage.getItem(nameKey) || 'prediction';
           await uploadUserCSV(user, csv, fname);
-          setSaveMsg('Saved to your profile.');
-        } catch (e) {
-          setSaveMsg('Failed to save pending data.');
+          success('Previous prediction saved to your profile.');
+        } catch {
+          showError('Failed to save pending data.');
         } finally {
           setSaving(false);
           localStorage.removeItem(key);
@@ -61,7 +56,7 @@ export default function Predictor() {
       }
     };
     tryUploadPending();
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, success, showError]);
 
   return (
     <>
@@ -114,9 +109,9 @@ export default function Predictor() {
                       You don’t need an account to get predictions. Sign in only if you want to save your results to your profile.
                     </div>
                   )}
-                  <PredictorForm onResult={async (r) => {
+                  <PredictorForm onResult={(r) => {
                     handleResult(r);
-                    // Try to capture the last submitted form values from DOM; as a fallback we store just the output
+                    // Capture the last submitted form values from DOM but DO NOT auto-save.
                     try {
                       const formEl = document.querySelector('form');
                       const fd = formEl ? new FormData(formEl as HTMLFormElement) : null;
@@ -125,34 +120,41 @@ export default function Predictor() {
                         fd.forEach((v, k) => { obj[k] = v; });
                       }
                       setLastInput(obj);
-                      await persistSingle(obj, r);
                     } catch {
                       setLastInput(null);
-                      await persistSingle({}, r);
                     }
                   }} />
                 </div>
                 <div className="lg:sticky lg:top-8">
                   {result ? (
                     <div id="prediction-result" className="space-y-6">
-                      {saveMsg && (
-                        <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">{saveMsg}</div>
-                      )}
                       <ProbabilityCard result={result} />
                       <div className="flex gap-2">
                         <button
-                          className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white disabled:bg-red-300"
-                          disabled={saving}
+                          className={`px-4 py-2 rounded-xl font-semibold transition-all duration-200 disabled:cursor-not-allowed ${
+                            saved 
+                              ? 'bg-green-600 text-white' 
+                              : saving 
+                              ? 'bg-red-300 text-white cursor-not-allowed' 
+                              : 'bg-red-600 hover:bg-red-700 text-white'
+                          }`}
+                          disabled={saving || saved}
                           onClick={async () => {
-                            setSaveMsg(null);
+                            if (saved) return; // Do nothing if already saved
+                            
                             const input = lastInput || {};
                             const output = result;
                             const row = { ...input, probability: output.probability, prediction: output.prediction, threshold: output.threshold, model_version: output.model_version } as Record<string, unknown>;
                             const csv = Papa.unparse([row]);
                             if (!isAuthenticated || !user) {
                               if (typeof window !== 'undefined') {
-                                localStorage.setItem('heartsense_pending_csv', csv);
-                                localStorage.setItem('heartsense_pending_filename', 'single_prediction');
+                                try {
+                                  console.debug('Storing pending single CSV to localStorage', { key: 'heartsense_pending_csv', size: csv.length });
+                                  localStorage.setItem('heartsense_pending_csv', String(csv));
+                                  localStorage.setItem('heartsense_pending_filename', 'single_prediction');
+                                } catch (err) {
+                                  console.error('Failed to write pending CSV to localStorage', err);
+                                }
                                 window.location.href = '/login?next=/predictor';
                               }
                               return;
@@ -160,14 +162,34 @@ export default function Predictor() {
                             try {
                               setSaving(true);
                               await uploadUserCSV(user, csv, 'single_prediction');
-                              setSaveMsg('Saved to your profile.');
-                            } catch (e) {
-                              setSaveMsg('Failed to save.');
+                              setSaved(true);
+                              success('Saved successfully to your profile!');
+                            } catch {
+                              showError('Failed to save prediction.');
                             } finally {
                               setSaving(false);
                             }
                           }}
-                        >{saving ? 'Saving…' : 'Save this result'}</button>
+                        >
+                          {saved ? (
+                            <>
+                              <svg className="inline-block w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                              Saved
+                            </>
+                          ) : saving ? (
+                            <>
+                              <svg className="animate-spin inline-block w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Saving...
+                            </>
+                          ) : (
+                            'Save this result'
+                          )}
+                        </button>
                       </div>
                       <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6">
                         <div className="flex items-start">
@@ -218,6 +240,16 @@ export default function Predictor() {
         </main>
 
         <Footer />
+
+        {/* Toast notifications */}
+        {toasts.map((toast) => (
+          <Toast
+            key={toast.id}
+            message={toast.message}
+            type={toast.type}
+            onClose={() => removeToast(toast.id)}
+          />
+        ))}
       </div>
     </>
   );

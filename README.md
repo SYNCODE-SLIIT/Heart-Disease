@@ -1,3 +1,7 @@
+# Heart Disease Prediction — Streamlit Demo
+
+https://syncode-sliit-heart-disease-appstreamlit-app-featureprav-txhnms.streamlit.app/
+
 # HeartSense – Heart Disease Risk Prediction
 
 HeartSense is an end-to-end project that predicts 10‑year Coronary Heart Disease (CHD) risk. It includes:
@@ -14,6 +18,13 @@ This README covers setup, dependency install, how to run each part, the project 
   - Command to run: `uvicorn app.main:app --reload --port 8000` (from `backend/`)
 - Web frontend (Next.js):
   - Command to run: `npm run dev` (from `chd-web/`)
+
+OAuth (Google/Facebook) setup for the web app:
+- In Supabase Auth Providers, enable Google and/or Facebook and set the redirect URL to `http://localhost:3000/auth/callback` for local dev.
+- Create a `.env.local` in `chd-web/` with:
+  - `NEXT_PUBLIC_SUPABASE_URL=...`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY=...`
+  - Optionally configure additional auth settings in Supabase as needed.
 
 Details below.
 

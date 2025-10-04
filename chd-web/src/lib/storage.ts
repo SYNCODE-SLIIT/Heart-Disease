@@ -58,3 +58,10 @@ export async function downloadCSV(path: string): Promise<string> {
   const text = await data.text();
   return text;
 }
+
+export async function deleteUserCSV(path: string): Promise<void> {
+  assertSupabaseConfigured();
+  // Supabase storage remove expects an array of file paths relative to the bucket
+  const { error } = await supabase!.storage.from(STORAGE_BUCKET).remove([path]);
+  if (error) throw error;
+}

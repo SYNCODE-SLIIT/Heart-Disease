@@ -8,6 +8,12 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 // Check if Supabase is properly configured
 const isSupabaseConfigured = supabaseUrl && supabaseAnonKey;
 
+// User metadata interface
+interface UserMetadata {
+  name?: string;
+  role?: 'patient' | 'doctor';
+}
+
 // Initialize Supabase client (or null if not configured)
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
@@ -21,12 +27,30 @@ class MockAuthProvider {
   constructor() {
     // Try to restore user from localStorage
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('mock_auth_user');
+          const stored = localStorage.getItem('heartsense_mock_user');
       if (stored) {
         try {
-          this.currentUser = JSON.parse(stored);
-        } catch {
-          console.warn('Failed to parse stored user');
+          // Defensive parse: stored should be a JSON string. If it's something like
+          // "[object Object]" or otherwise not JSON, avoid throwing and clear it.
+          if (typeof stored === 'string') {
+            const trimmed = stored.trim();
+                if (trimmed === '[object Object]' || trimmed === 'undefined' || trimmed === 'null') {
+                  console.warn('Found non-JSON mock user value in localStorage, clearing:', trimmed);
+                  localStorage.removeItem('heartsense_mock_user');
+            } else {
+              // Only attempt JSON.parse if it looks like JSON
+              if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                this.currentUser = JSON.parse(stored);
+              } else {
+                // Not JSON — log and clear to avoid downstream parse errors
+                console.warn('Stored mock_auth_user is not JSON; clearing stored value.', stored);
+                localStorage.removeItem('mock_auth_user');
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to parse stored user', err);
+          try { localStorage.removeItem('mock_auth_user'); } catch{}
         }
       }
     }
@@ -138,6 +162,19 @@ class MockAuthProvider {
     return { error: null };
   }
 
+  async updateUserMetadata(data: Record<string, unknown>): Promise<{ user: User | null; error: AuthError | null }> {
+    if (!this.currentUser) {
+      return { user: null, error: { name: 'AuthError', message: 'No user', status: 400 } as AuthError };
+    }
+    const mergedMeta = { ...(this.currentUser.user_metadata || {}), ...data } as Record<string, unknown>;
+    this.currentUser = { ...this.currentUser, user_metadata: mergedMeta } as User;
+    if (typeof window !== 'undefined') {
+      try { localStorage.setItem('mock_auth_user', JSON.stringify(this.currentUser)); } catch (_) {}
+    }
+    this.listeners.forEach((l) => l(this.currentUser));
+    return { user: this.currentUser, error: null };
+  }
+
   onAuthStateChange(callback: (user: User | null) => void): () => void {
     this.listeners.push(callback);
     
@@ -168,6 +205,93 @@ export const auth = {
       return user;
     }
     return mockAuth.getUser();
+  },
+
+  /** Update user metadata (e.g., role, name) */
+  async updateUserMetadata(data: Record<string, unknown>): Promise<{ user: User | null; error: AuthError | null }> {
+    if (supabase) {
+      const { data: upd, error } = await supabase.auth.updateUser({ data });
+      return { user: upd.user ?? null, error: error as AuthError | null };
+    }
+    return mockAuth.updateUserMetadata(data);
+  },
+
+  /**
+   * Sign in with Google OAuth
+   */
+  async signInWithGoogle(nextPath?: string): Promise<void> {
+    if (!supabase) {
+      // In mock mode, just simulate a Google sign in by creating a mock user
+      // and redirecting immediately.
+      const mockEmail = `google_user_${Date.now()}@example.com`;
+      await mockAuth.signIn(mockEmail, 'oauth');
+      if (typeof window !== 'undefined') {
+        const next = nextPath || localStorage.getItem('heartsense_oauth_next') || '/my-data';
+        window.location.href = next;
+      }
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      if (nextPath) {
+        try { localStorage.setItem('heartsense_oauth_next', nextPath); } catch (_) {}
+      } else {
+        // If there is a next param in URL, store it as well
+        const url = new URL(window.location.href);
+        const qNext = url.searchParams.get('next');
+        if (qNext) { try { localStorage.setItem('heartsense_oauth_next', qNext); } catch (_) {} }
+      }
+    }
+
+    const redirectTo = typeof window !== 'undefined'
+      ? `${window.location.origin}/auth/callback`
+      : undefined;
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+  },
+
+  /**
+   * Sign in with Facebook OAuth
+   */
+  async signInWithFacebook(nextPath?: string): Promise<void> {
+    if (!supabase) {
+      // Mock mode: simulate OAuth
+      const mockEmail = `fb_user_${Date.now()}@example.com`;
+      await mockAuth.signIn(mockEmail, 'oauth');
+      if (typeof window !== 'undefined') {
+        const next = nextPath || localStorage.getItem('heartsense_oauth_next') || '/my-data';
+        window.location.href = next;
+      }
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      if (nextPath) {
+        try { localStorage.setItem('heartsense_oauth_next', nextPath); } catch (_) {}
+      } else {
+        const url = new URL(window.location.href);
+        const qNext = url.searchParams.get('next');
+        if (qNext) { try { localStorage.setItem('heartsense_oauth_next', qNext); } catch (_) {} }
+      }
+    }
+
+    const redirectTo = typeof window !== 'undefined'
+      ? `${window.location.origin}/auth/callback`
+      : undefined;
+    await supabase.auth.signInWithOAuth({
+      provider: 'facebook',
+      options: {
+        redirectTo,
+      },
+    });
   },
 
   /**
@@ -251,9 +375,12 @@ export function useAuth() {
     loading,
     signIn: auth.signIn,
     signUp: auth.signUp,
+    signInWithGoogle: auth.signInWithGoogle,
+    signInWithFacebook: auth.signInWithFacebook,
     signOut: auth.signOut,
+    updateUserMetadata: auth.updateUserMetadata,
     isAuthenticated: !!user,
-    role: (user?.user_metadata as any)?.role as ('patient'|'doctor'|undefined),
+    role: (user?.user_metadata as UserMetadata)?.role,
   };
 }
 
