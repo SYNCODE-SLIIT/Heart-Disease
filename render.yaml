@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: heartsense-api
+    env: python
+    plan: free
+    repo: https://github.com/SYNCODE-SLIIT/Heart-Disease
+    branch: main
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: gunicorn -k uvicorn.workers.UvicornWorker app.main:app --chdir backend --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    envVars:
+      - key: MODEL_PATH
+        value: heart_rf_pipeline_compressed.pkl   # or heart_rf_pipeline.pkl if not compressed
+      - key: THRESHOLD_PATH
+        value: decision_threshold.json
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: API_V1_PREFIX
+        value: "/api"
+      - key: MODEL_VERSION
+        value: "1.0.0"
