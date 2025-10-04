@@ -19,6 +19,13 @@ This README covers setup, dependency install, how to run each part, the project 
 - Web frontend (Next.js):
   - Command to run: `npm run dev` (from `chd-web/`)
 
+OAuth (Google/Facebook) setup for the web app:
+- In Supabase Auth Providers, enable Google and/or Facebook and set the redirect URL to `http://localhost:3000/auth/callback` for local dev.
+- Create a `.env.local` in `chd-web/` with:
+  - `NEXT_PUBLIC_SUPABASE_URL=...`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY=...`
+  - Optionally configure additional auth settings in Supabase as needed.
+
 Details below.
 
 ## Project structure

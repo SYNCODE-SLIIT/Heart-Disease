@@ -162,6 +162,19 @@ class MockAuthProvider {
     return { error: null };
   }
 
+  async updateUserMetadata(data: Record<string, unknown>): Promise<{ user: User | null; error: AuthError | null }> {
+    if (!this.currentUser) {
+      return { user: null, error: { name: 'AuthError', message: 'No user', status: 400 } as AuthError };
+    }
+    const mergedMeta = { ...(this.currentUser.user_metadata || {}), ...data } as Record<string, unknown>;
+    this.currentUser = { ...this.currentUser, user_metadata: mergedMeta } as User;
+    if (typeof window !== 'undefined') {
+      try { localStorage.setItem('mock_auth_user', JSON.stringify(this.currentUser)); } catch (_) {}
+    }
+    this.listeners.forEach((l) => l(this.currentUser));
+    return { user: this.currentUser, error: null };
+  }
+
   onAuthStateChange(callback: (user: User | null) => void): () => void {
     this.listeners.push(callback);
     
@@ -192,6 +205,93 @@ export const auth = {
       return user;
     }
     return mockAuth.getUser();
+  },
+
+  /** Update user metadata (e.g., role, name) */
+  async updateUserMetadata(data: Record<string, unknown>): Promise<{ user: User | null; error: AuthError | null }> {
+    if (supabase) {
+      const { data: upd, error } = await supabase.auth.updateUser({ data });
+      return { user: upd.user ?? null, error: error as AuthError | null };
+    }
+    return mockAuth.updateUserMetadata(data);
+  },
+
+  /**
+   * Sign in with Google OAuth
+   */
+  async signInWithGoogle(nextPath?: string): Promise<void> {
+    if (!supabase) {
+      // In mock mode, just simulate a Google sign in by creating a mock user
+      // and redirecting immediately.
+      const mockEmail = `google_user_${Date.now()}@example.com`;
+      await mockAuth.signIn(mockEmail, 'oauth');
+      if (typeof window !== 'undefined') {
+        const next = nextPath || localStorage.getItem('heartsense_oauth_next') || '/my-data';
+        window.location.href = next;
+      }
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      if (nextPath) {
+        try { localStorage.setItem('heartsense_oauth_next', nextPath); } catch (_) {}
+      } else {
+        // If there is a next param in URL, store it as well
+        const url = new URL(window.location.href);
+        const qNext = url.searchParams.get('next');
+        if (qNext) { try { localStorage.setItem('heartsense_oauth_next', qNext); } catch (_) {} }
+      }
+    }
+
+    const redirectTo = typeof window !== 'undefined'
+      ? `${window.location.origin}/auth/callback`
+      : undefined;
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+  },
+
+  /**
+   * Sign in with Facebook OAuth
+   */
+  async signInWithFacebook(nextPath?: string): Promise<void> {
+    if (!supabase) {
+      // Mock mode: simulate OAuth
+      const mockEmail = `fb_user_${Date.now()}@example.com`;
+      await mockAuth.signIn(mockEmail, 'oauth');
+      if (typeof window !== 'undefined') {
+        const next = nextPath || localStorage.getItem('heartsense_oauth_next') || '/my-data';
+        window.location.href = next;
+      }
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      if (nextPath) {
+        try { localStorage.setItem('heartsense_oauth_next', nextPath); } catch (_) {}
+      } else {
+        const url = new URL(window.location.href);
+        const qNext = url.searchParams.get('next');
+        if (qNext) { try { localStorage.setItem('heartsense_oauth_next', qNext); } catch (_) {} }
+      }
+    }
+
+    const redirectTo = typeof window !== 'undefined'
+      ? `${window.location.origin}/auth/callback`
+      : undefined;
+    await supabase.auth.signInWithOAuth({
+      provider: 'facebook',
+      options: {
+        redirectTo,
+      },
+    });
   },
 
   /**
@@ -275,7 +375,10 @@ export function useAuth() {
     loading,
     signIn: auth.signIn,
     signUp: auth.signUp,
+    signInWithGoogle: auth.signInWithGoogle,
+    signInWithFacebook: auth.signInWithFacebook,
     signOut: auth.signOut,
+    updateUserMetadata: auth.updateUserMetadata,
     isAuthenticated: !!user,
     role: (user?.user_metadata as UserMetadata)?.role,
   };
