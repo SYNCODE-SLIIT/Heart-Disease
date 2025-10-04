@@ -24,8 +24,8 @@ export default function Profile() {
   }, [loading, user, router]);
 
   useEffect(() => {
-    if (user?.user_metadata?.avatar_url) {
-      const metaUrl = user.user_metadata.avatar_url as string;
+    const metaUrl = (user?.user_metadata?.avatar_url || (user?.user_metadata as any)?.picture) as string | undefined;
+    if (metaUrl) {
       // Try to display stored URL, but if bucket is private the image may not load.
       // We'll attempt to derive a storage path and request a signed URL as a fallback.
       setAvatarUrl(metaUrl);
@@ -309,6 +309,8 @@ export default function Profile() {
                           alt="Profile"
                           className="w-full h-full relative z-10"
                           style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', backgroundColor: 'transparent' }}
+                          referrerPolicy="no-referrer"
+                          crossOrigin="anonymous"
                           onLoad={() => console.log('Top avatar loaded OK')}
                           onError={(e) => {
                             console.error('Top avatar failed to load (kept URL):', avatarUrl, e);
