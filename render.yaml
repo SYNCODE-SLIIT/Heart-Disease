@@ -6,10 +6,10 @@ services:
     repo: https://github.com/SYNCODE-SLIIT/Heart-Disease
     branch: main
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: gunicorn -k uvicorn.workers.UvicornWorker app.main:app --chdir backend --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --app-dir backend --workers 1 --loop uvloop --http h11
     envVars:
       - key: MODEL_PATH
-        value: heart_rf_pipeline_compressed.pkl   # or heart_rf_pipeline.pkl if not compressed
+        value: heart_rf_pipeline.pkl
       - key: THRESHOLD_PATH
         value: decision_threshold.json
       - key: ALLOWED_ORIGINS
