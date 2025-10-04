@@ -20,7 +20,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Get redirect path from query params
-  const next = (router.query.next as string) || '/my-data';
+  const next = (router.query.next as string) || '/';
 
   const validateForm = (): boolean => {
     const newErrors: { email?: string; password?: string } = {};
@@ -64,7 +64,7 @@ export default function Login() {
         
         // Redirect after a short delay
         setTimeout(() => {
-          router.push(next || '/profile');
+          router.push(next);
         }, 500);
       }
     } catch {
