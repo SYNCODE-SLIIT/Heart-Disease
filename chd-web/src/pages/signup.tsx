@@ -83,7 +83,7 @@ export default function Signup() {
         
         // Redirect after a short delay
         setTimeout(() => {
-          const uRole = (user.user_metadata as any)?.role as 'patient'|'doctor'|undefined;
+          const uRole = (user.user_metadata as { role?: 'patient'|'doctor' } | undefined)?.role;
           router.push(uRole === 'doctor' ? '/profile' : '/my-data');
         }, 500);
       }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from 'react';
-import Button from './ui/Button';
 import { useMutation } from '@tanstack/react-query';
 // No direct file upload API now; using JSON /batch
 import { parseFile, normalizeBatch, cleanedCsv, type NormalizeResult } from '../lib/batchNormalize';
@@ -464,8 +463,9 @@ export default function BulkPredictPanel() {
 
                       await uploadUserCSV(user!, csv, filenameHint);
                       setSaveStatus('Saved to your profile');
-                    } catch (e: any) {
-                      setSaveStatus(e?.message || 'Failed to save');
+                    } catch (e: unknown) {
+                      const msg = e instanceof Error ? e.message : 'Failed to save';
+                      setSaveStatus(msg);
                     } finally {
                       setIsSaving(false);
                     }
@@ -478,6 +478,9 @@ export default function BulkPredictPanel() {
               )}
             </div>
           </div>
+          {saveStatus && (
+            <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 text-sm">{saveStatus}</div>
+          )}
           {!user && (
             <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
               Tip: Sign in to automatically save these batch results to your profile.

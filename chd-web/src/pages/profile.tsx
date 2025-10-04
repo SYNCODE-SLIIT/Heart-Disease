@@ -3,10 +3,8 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import Nav from '../components/Nav';
 import Footer from '../components/Footer';
-import Button from '../components/ui/Button';
 import { useAuth } from '../lib/supabaseClient';
 import { supabase } from '../lib/supabaseClient';
-import AvatarDebug from '../components/AvatarDebug';
 
 export default function Profile() {
   const router = useRouter();
@@ -24,7 +22,7 @@ export default function Profile() {
   }, [loading, user, router]);
 
   useEffect(() => {
-    const metaUrl = (user?.user_metadata?.avatar_url || (user?.user_metadata as any)?.picture) as string | undefined;
+    const metaUrl = (user?.user_metadata?.avatar_url || (user?.user_metadata as { picture?: string } | undefined)?.picture) as string | undefined;
     if (metaUrl) {
       // Try to display stored URL, but if bucket is private the image may not load.
       // We'll attempt to derive a storage path and request a signed URL as a fallback.
@@ -42,7 +40,7 @@ export default function Profile() {
               setAvatarUrl(signedData.signedUrl);
             }
           }
-        } catch (e) {
+        } catch {
           // ignore fallback errors
         }
       })();
@@ -73,7 +71,7 @@ export default function Profile() {
             }
           }
         }
-      } catch (e) {
+      } catch (e: unknown) {
         console.error('Error checking avatar URL', e);
       }
     })();
@@ -127,7 +125,7 @@ export default function Profile() {
       try {
         const { data: signedData, error: signErr } = await supabase.storage.from('avatars').createSignedUrl(path, 60 * 60);
         if (!signErr && signedData?.signedUrl) signedUrl = signedData.signedUrl;
-      } catch (_) {
+      } catch {
         // ignore
       }
 
@@ -147,9 +145,10 @@ export default function Profile() {
       if (session?.user) {
         console.log('Avatar URL in session:', session.user.user_metadata.avatar_url);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to upload avatar';
       console.error('Avatar upload failed:', e);
-      setErr(e?.message || 'Failed to upload avatar');
+      setErr(msg);
     } finally {
       setIsUploading(false);
     }
@@ -165,8 +164,9 @@ export default function Profile() {
       if (uErr) throw uErr;
       setAvatarUrl(null);
       setShowAvatarMenu(false);
-    } catch (e: any) {
-      setErr(e?.message || 'Failed to remove avatar');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to remove avatar';
+      setErr(msg);
     } finally {
       setIsUploading(false);
     }
@@ -403,7 +403,7 @@ export default function Profile() {
                       <div>
                         <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Full Name</div>
                         <div className="text-lg font-semibold text-gray-900">
-                          {(user.user_metadata as any)?.name || <span className="text-gray-400 italic">Not set</span>}
+                          {(user.user_metadata as { name?: string } | undefined)?.name || <span className="text-gray-400 italic">Not set</span>}
                         </div>
                       </div>
                       <div>
@@ -431,7 +431,7 @@ export default function Profile() {
                       <div>
                         <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Role</div>
                         <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-600 text-white">
-                          {(user.user_metadata as any)?.role === 'doctor' ? '👨‍⚕️ Doctor' : '🧑 Patient'}
+                          {(user.user_metadata as { role?: 'patient'|'doctor' } | undefined)?.role === 'doctor' ? '👨‍⚕️ Doctor' : '🧑 Patient'}
                         </div>
                       </div>
                       <div>

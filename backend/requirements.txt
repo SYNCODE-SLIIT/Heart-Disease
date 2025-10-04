@@ -1,2 +1,32 @@
-# Use the root requirements as the single source of truth
--r ../requirements.txt
+###########################################################
+# Backend (FastAPI) requirements — pinned for reproducibility
+###########################################################
+
+# Core API
+fastapi==0.115.5
+uvicorn[standard]==0.34.0
+pydantic==2.9.2
+
+# Event loop / HTTP implementation (optional explicit pins to avoid linter warnings)
+uvloop==0.17.0
+h11==0.14.0
+
+# Data/ML runtime for inference (for joblib + sklearn pipeline)
+pandas==2.3.2
+numpy==2.3.3
+scikit-learn==1.7.2
+scipy==1.16.2
+joblib==1.5.2
+
+# File uploads and spreadsheet support
+python-multipart==0.0.10
+openpyxl==3.1.5
+XlsxWriter==3.2.0
+xlrd==2.0.1
+
+# Optional PDF export (if installed, API enables PDF export)
+reportlab==4.2.5
+
+# Notes:
+# - uvloop + h11 are optional but help remove editor/Render-form warnings.
+# - Keep backend-only deps here to keep the API image slim.

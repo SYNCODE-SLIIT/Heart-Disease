@@ -33,8 +33,9 @@ export default function MyData() {
       try {
         const list = await listUserCSVs(user);
         setRows(list);
-      } catch (e: any) {
-        setErr(e?.message || 'Failed to load your files');
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to load your files';
+        setErr(msg);
       }
     };
     load();
@@ -135,10 +136,11 @@ export default function MyData() {
                                     // Optimistic UI: remove from list locally
                                     setRows((prev) => prev ? prev.filter(p => p.path !== r.path) : prev);
                                     await deleteUserCSV(r.path);
-                                  } catch (e: any) {
-                                    setErr(e?.message || 'Failed to delete file');
+                                  } catch (e: unknown) {
+                                    const msg = e instanceof Error ? e.message : 'Failed to delete file';
+                                    setErr(msg);
                                     // Re-load listing to ensure UI consistency
-                                    try { const list = await listUserCSVs(user); setRows(list); } catch(_){}
+                                    try { const list = await listUserCSVs(user); setRows(list); } catch { }
                                   }
                                 }}
                               ><span className="text-red-600">Delete</span></Button>
@@ -177,8 +179,9 @@ export default function MyData() {
                           }
                           setCombined(all);
                           setPage(1);
-                        } catch (e: any) {
-                          setErr(e?.message || 'Failed to build combined table');
+                        } catch (e: unknown) {
+                          const msg = e instanceof Error ? e.message : 'Failed to build combined table';
+                          setErr(msg);
                         } finally {
                           setIsCombining(false);
                         }
