@@ -5,7 +5,7 @@ import { supabase, useAuth } from '../../lib/supabaseClient';
 
 export default function AuthCallback() {
   const router = useRouter();
-  const { role } = useAuth();
+  useAuth();
 
   useEffect(() => {
     let isMounted = true;
@@ -17,7 +17,7 @@ export default function AuthCallback() {
           ? (localStorage.getItem('heartsense_oauth_next') || '/my-data')
           : '/my-data';
         if (typeof window !== 'undefined') {
-          try { localStorage.removeItem('heartsense_oauth_next'); } catch (_) {}
+          try { localStorage.removeItem('heartsense_oauth_next'); } catch {}
         }
 
         // Ensure we have user and try to auto-fill profile details from provider
@@ -28,9 +28,11 @@ export default function AuthCallback() {
           // Try to auto-fill name and avatar from OAuth identity if missing
           try {
             if (user) {
-              const meta = (user.user_metadata || {}) as any;
-              const identities: any[] = (user as any).identities || [];
-              let providerData: any = null;
+              type ProviderIdentity = { provider?: string; identity_data?: Record<string, unknown> };
+              type Meta = { name?: string; full_name?: string; given_name?: string; family_name?: string; avatar_url?: string; picture?: string; role?: 'patient'|'doctor' };
+              const meta = (user.user_metadata || {}) as Meta;
+              const identities = ((user as unknown as { identities?: ProviderIdentity[] })?.identities) || [];
+              let providerData: Record<string, unknown> | null = null;
               if (identities && identities.length > 0) {
                 providerData = identities.find((id) => id.provider === 'google')?.identity_data
                   || identities.find((id) => id.provider === 'facebook')?.identity_data
@@ -50,22 +52,22 @@ export default function AuthCallback() {
                 await supabase.auth.updateUser({ data: updates });
               }
             }
-          } catch (_) {
+          } catch {
             // ignore metadata update failures
           }
 
           // Role-based redirect decision
-          const userRole = (user?.user_metadata as any)?.role as string | undefined;
+          const userRole = (user?.user_metadata as { role?: 'patient'|'doctor' } | undefined)?.role;
           if (!userRole) {
             dest = '/select-role';
             if (typeof window !== 'undefined') {
-              try { localStorage.setItem('heartsense_oauth_postrole_next', savedNext); } catch (_) {}
+              try { localStorage.setItem('heartsense_oauth_postrole_next', savedNext); } catch {}
             }
           }
         }
 
         if (isMounted) router.replace(dest);
-      } catch (e) {
+      } catch {
         if (isMounted) router.replace('/my-data');
       }
     })();

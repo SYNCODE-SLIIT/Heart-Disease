@@ -32,11 +32,12 @@ export default function SelectRole() {
         ? (localStorage.getItem('heartsense_oauth_postrole_next') || '/my-data')
         : '/my-data';
       if (typeof window !== 'undefined') {
-        try { localStorage.removeItem('heartsense_oauth_postrole_next'); } catch(_){}
+        try { localStorage.removeItem('heartsense_oauth_postrole_next'); } catch { }
       }
       router.replace(next);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to save role');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to save role';
+      setError(msg);
     } finally {
       setSaving(false);
     }
