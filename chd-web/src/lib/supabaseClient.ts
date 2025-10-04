@@ -8,6 +8,12 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 // Check if Supabase is properly configured
 const isSupabaseConfigured = supabaseUrl && supabaseAnonKey;
 
+// User metadata interface
+interface UserMetadata {
+  name?: string;
+  role?: 'patient' | 'doctor';
+}
+
 // Initialize Supabase client (or null if not configured)
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
@@ -44,7 +50,7 @@ class MockAuthProvider {
           }
         } catch (err) {
           console.warn('Failed to parse stored user', err);
-          try { localStorage.removeItem('mock_auth_user'); } catch(e){}
+          try { localStorage.removeItem('mock_auth_user'); } catch{}
         }
       }
     }
@@ -271,7 +277,7 @@ export function useAuth() {
     signUp: auth.signUp,
     signOut: auth.signOut,
     isAuthenticated: !!user,
-    role: (user?.user_metadata as any)?.role as ('patient'|'doctor'|undefined),
+    role: (user?.user_metadata as UserMetadata)?.role,
   };
 }
 
