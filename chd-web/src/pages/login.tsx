@@ -61,6 +61,13 @@ export default function Login() {
 
       if (user) {
         success('Successfully signed in!');
+          try {
+            // Show a global banner after redirect
+            localStorage.setItem('heartsense_flash', JSON.stringify({
+              message: 'Please check your email to confirm your account. Some features may remain limited until verification is complete.',
+              type: 'info'
+            }));
+          } catch {}
         
         // Redirect after a short delay
         setTimeout(() => {

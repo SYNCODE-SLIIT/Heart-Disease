@@ -66,6 +66,12 @@ export default function AuthCallback() {
           }
         }
 
+        try {
+          localStorage.setItem('heartsense_flash', JSON.stringify({
+            message: 'If you haven\'t already, please check your email to verify your account. Some features may remain limited until verification is complete.',
+            type: 'info'
+          }));
+        } catch {}
         if (isMounted) router.replace(dest);
       } catch {
         if (isMounted) router.replace('/my-data');
