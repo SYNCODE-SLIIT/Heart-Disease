@@ -9,13 +9,14 @@ export default function VerifyEmailBanner() {
 
   if (loading) return null;
   // Only show if Supabase is configured and user is present and email not confirmed
-  const needsVerify = !!supabase && !!user && !(user as any).email_confirmed_at;
+  const needsVerify = Boolean(supabase && user && !user.email_confirmed_at);
   if (!needsVerify) return null;
 
-  const email = user!.email || '';
+  const email = user?.email ?? '';
 
   const resend = async () => {
-    if (!supabase || !email) return;
+    const client = supabase;
+    if (!client || !email) return;
     setSending(true);
     setErr(null);
     setMsg(null);
@@ -25,12 +26,20 @@ export default function VerifyEmailBanner() {
       // Supabase resend verification email
       // See: https://supabase.com/docs/reference/javascript/auth-resend
       // type: 'signup' triggers re-sending the confirmation email
-      // @ts-ignore - options type depends on SDK version
-      const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo } });
+      const params: Parameters<typeof client.auth.resend>[0] = {
+        type: 'signup',
+        email,
+        options: emailRedirectTo ? { emailRedirectTo } : undefined,
+      };
+      const { error } = await client.auth.resend(params);
       if (error) throw error;
       setMsg('Verification email sent. Please check your inbox.');
-    } catch (e: any) {
-      setErr(e?.message || 'Failed to send verification email');
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        setErr(error.message);
+      } else {
+        setErr('Failed to send verification email');
+      }
     } finally {
       setSending(false);
     }
