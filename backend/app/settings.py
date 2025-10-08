@@ -14,7 +14,7 @@ MODEL_VERSION = "local-dev"
 
 # CORS settings
 ALLOWED_ORIGINS = [
-    "https://heart-disease-zhh3.vercel.app",
+    "heart-disease-phi.vercel.app",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
