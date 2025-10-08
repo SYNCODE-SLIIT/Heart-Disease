@@ -80,10 +80,15 @@ export default function Signup() {
 
       if (user) {
         success('Account created successfully! Redirecting...');
-        
+        try {
+          localStorage.setItem('heartsense_flash', JSON.stringify({
+            message: "We've sent a confirmation link to your email. Please verify to unlock all features.",
+            type: 'info'
+          }));
+        } catch {}
         // Redirect after a short delay
         setTimeout(() => {
-          const uRole = (user.user_metadata as any)?.role as 'patient'|'doctor'|undefined;
+          const uRole = (user.user_metadata as { role?: 'patient'|'doctor' } | undefined)?.role;
           router.push(uRole === 'doctor' ? '/profile' : '/my-data');
         }, 500);
       }

@@ -169,7 +169,7 @@ class MockAuthProvider {
     const mergedMeta = { ...(this.currentUser.user_metadata || {}), ...data } as Record<string, unknown>;
     this.currentUser = { ...this.currentUser, user_metadata: mergedMeta } as User;
     if (typeof window !== 'undefined') {
-      try { localStorage.setItem('mock_auth_user', JSON.stringify(this.currentUser)); } catch (_) {}
+      try { localStorage.setItem('mock_auth_user', JSON.stringify(this.currentUser)); } catch {}
     }
     this.listeners.forEach((l) => l(this.currentUser));
     return { user: this.currentUser, error: null };
@@ -234,12 +234,12 @@ export const auth = {
 
     if (typeof window !== 'undefined') {
       if (nextPath) {
-        try { localStorage.setItem('heartsense_oauth_next', nextPath); } catch (_) {}
+        try { localStorage.setItem('heartsense_oauth_next', nextPath); } catch {}
       } else {
         // If there is a next param in URL, store it as well
         const url = new URL(window.location.href);
         const qNext = url.searchParams.get('next');
-        if (qNext) { try { localStorage.setItem('heartsense_oauth_next', qNext); } catch (_) {} }
+        if (qNext) { try { localStorage.setItem('heartsense_oauth_next', qNext); } catch {} }
       }
     }
 
@@ -275,11 +275,11 @@ export const auth = {
 
     if (typeof window !== 'undefined') {
       if (nextPath) {
-        try { localStorage.setItem('heartsense_oauth_next', nextPath); } catch (_) {}
+        try { localStorage.setItem('heartsense_oauth_next', nextPath); } catch {}
       } else {
         const url = new URL(window.location.href);
         const qNext = url.searchParams.get('next');
-        if (qNext) { try { localStorage.setItem('heartsense_oauth_next', qNext); } catch (_) {} }
+        if (qNext) { try { localStorage.setItem('heartsense_oauth_next', qNext); } catch {} }
       }
     }
 
@@ -313,11 +313,17 @@ export const auth = {
    */
   async signUp(email: string, password: string, metadata?: { name?: string; role?: 'patient'|'doctor' }): Promise<{ user: User | null; error: AuthError | null }> {
     if (supabase) {
+      const origin = (typeof window !== 'undefined')
+        ? (process.env.NEXT_PUBLIC_FORCE_OAUTH_ORIGIN || window.location.origin)
+        : undefined;
+      const emailRedirectTo = origin ? `${origin}/auth/callback` : undefined;
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: metadata,
+          // Explicitly set redirect target for email confirmation links
+          emailRedirectTo,
         },
       });
       return { user: data.user, error };
