@@ -313,11 +313,17 @@ export const auth = {
    */
   async signUp(email: string, password: string, metadata?: { name?: string; role?: 'patient'|'doctor' }): Promise<{ user: User | null; error: AuthError | null }> {
     if (supabase) {
+      const origin = (typeof window !== 'undefined')
+        ? (process.env.NEXT_PUBLIC_FORCE_OAUTH_ORIGIN || window.location.origin)
+        : undefined;
+      const emailRedirectTo = origin ? `${origin}/auth/callback` : undefined;
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: metadata,
+          // Explicitly set redirect target for email confirmation links
+          emailRedirectTo,
         },
       });
       return { user: data.user, error };

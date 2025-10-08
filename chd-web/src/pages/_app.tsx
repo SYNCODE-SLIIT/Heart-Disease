@@ -2,6 +2,8 @@ import type { AppProps } from 'next/app';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import '../styles/globals.css';
+import FlashBanner from '../components/FlashBanner';
+import VerifyEmailBanner from '../components/VerifyEmailBanner';
 
 export default function App({ Component, pageProps }: AppProps) {
   const [queryClient] = useState(() => new QueryClient({
@@ -15,6 +17,8 @@ export default function App({ Component, pageProps }: AppProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <FlashBanner />
+      <VerifyEmailBanner />
       <Component {...pageProps} />
     </QueryClientProvider>
   );

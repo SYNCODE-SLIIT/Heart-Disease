@@ -1,3 +1,7 @@
+# Heart Disease Prediction — Streamlit Demo
+
+https://syncode-sliit-heart-disease-appstreamlit-app-featureprav-txhnms.streamlit.app/
+
 # HeartSense – Heart Disease Risk Prediction
 
 HeartSense is an end-to-end project that predicts 10‑year Coronary Heart Disease (CHD) risk. It includes:
