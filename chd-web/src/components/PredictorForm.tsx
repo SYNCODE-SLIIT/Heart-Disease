@@ -3,6 +3,7 @@ import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { PredictIn, PredictOut } from '../lib/types';
+import Modal from './ui/Modal';
 import { postPredict, ApiError } from '../lib/api';
 
 // Zod schema for form validation
@@ -40,20 +41,23 @@ type FormData = z.infer<typeof predictSchema>;
 
 interface PredictorFormProps {
   onResult: (result: PredictOut) => void;
+  locked?: boolean; // when true, prevent editing and prompt to reset
+  onRequestReset?: () => void; // parent callback to clear result state
 }
 
-export default function PredictorForm({ onResult }: PredictorFormProps) {
+export default function PredictorForm({ onResult, locked = false, onRequestReset }: PredictorFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showResetModal, setShowResetModal] = useState(false);
 
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isSubmitted },
     reset,
     watch,
     setValue,
-  } = useForm<FormData>({ resolver: zodResolver(predictSchema) });
+  } = useForm<FormData>({ resolver: zodResolver(predictSchema), mode: 'onSubmit' });
 
   // Prevent typing minus/exponent/plus in number inputs
   const preventMinus: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
@@ -110,6 +114,18 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
     setError(null);
   };
 
+  // Guard interactions when locked: capture focus/click and prompt to reset
+  const guardInteraction = (e: React.SyntheticEvent) => {
+    if (!locked) return;
+    const target = e.target as HTMLElement;
+    const tag = target?.tagName;
+    if (tag && (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA')) {
+      e.preventDefault();
+      e.stopPropagation();
+      setShowResetModal(true);
+    }
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
       <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
@@ -124,7 +140,12 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        onMouseDownCapture={guardInteraction}
+        onFocusCapture={guardInteraction}
+        className="space-y-6"
+      >
         {/* Demographics */}
         <div className="bg-gray-50 rounded-xl p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Demographics</h3>
@@ -132,7 +153,8 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Age (years) *
+                Age (years)
+                {isSubmitted && errors.age && <span className="text-red-600"> *</span>}
               </label>
               <input
                 type="number"
@@ -140,28 +162,28 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 {...register('age', { valueAsNumber: true })}
                 onKeyDown={preventMinus}
                 onPaste={preventInvalidPaste}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 ${isSubmitted && errors.age ? 'border-red-400' : 'border-gray-300'}`}
                 placeholder="e.g., 45"
               />
-              {errors.age && (
-                <p className="text-red-600 text-sm mt-1">{errors.age.message}</p>
+              {isSubmitted && errors.age && (
+                <p className="text-red-600 text-xs mt-1">{errors.age.message}</p>
               )}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Gender *
+                Gender{isSubmitted && errors.gender && <span className="text-red-600"> *</span>}
               </label>
               <select
                 {...register('gender', { setValueAs: (v) => (v === '' ? undefined : v) })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white"
+                className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white ${isSubmitted && errors.gender ? 'border-red-400' : 'border-gray-300'}`}
               >
                 <option value="">Select gender</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
               </select>
-              {errors.gender && (
-                <p className="text-red-600 text-sm mt-1">{errors.gender.message}</p>
+              {isSubmitted && errors.gender && (
+                <p className="text-red-600 text-xs mt-1">{errors.gender.message}</p>
               )}
             </div>
           </div>
@@ -174,7 +196,7 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Systolic Blood Pressure (mmHg) *
+                Systolic Blood Pressure (mmHg){isSubmitted && errors.sysBP && <span className="text-red-600"> *</span>}
               </label>
               <input
                 type="number"
@@ -183,11 +205,11 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 {...register('sysBP', { valueAsNumber: true })}
                 onKeyDown={preventMinus}
                 onPaste={preventInvalidPaste}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 ${isSubmitted && errors.sysBP ? 'border-red-400' : 'border-gray-300'}`}
                 placeholder="e.g., 130"
               />
-              {errors.sysBP && (
-                <p className="text-red-600 text-sm mt-1">{errors.sysBP.message}</p>
+              {isSubmitted && errors.sysBP && (
+                <p className="text-red-600 text-xs mt-1">{errors.sysBP.message}</p>
               )}
             </div>
 
@@ -205,14 +227,14 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 40"
               />
-              {errors.pulsePressure && (
-                <p className="text-red-600 text-sm mt-1">{errors.pulsePressure.message}</p>
+              {isSubmitted && errors.pulsePressure && (
+                <p className="text-red-600 text-xs mt-1">{errors.pulsePressure.message}</p>
               )}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                BMI (kg/m²) *
+                BMI (kg/m²){isSubmitted && errors.BMI && <span className="text-red-600"> *</span>}
               </label>
               <input
                 type="number"
@@ -221,11 +243,11 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 {...register('BMI', { valueAsNumber: true })}
                 onKeyDown={preventMinus}
                 onPaste={preventInvalidPaste}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 ${isSubmitted && errors.BMI ? 'border-red-400' : 'border-gray-300'}`}
                 placeholder="e.g., 25.5"
               />
-              {errors.BMI && (
-                <p className="text-red-600 text-sm mt-1">{errors.BMI.message}</p>
+              {isSubmitted && errors.BMI && (
+                <p className="text-red-600 text-xs mt-1">{errors.BMI.message}</p>
               )}
             </div>
 
@@ -243,8 +265,8 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 75"
               />
-              {errors.heartRate && (
-                <p className="text-red-600 text-sm mt-1">{errors.heartRate.message}</p>
+              {isSubmitted && errors.heartRate && (
+                <p className="text-red-600 text-xs mt-1">{errors.heartRate.message}</p>
               )}
             </div>
           </div>
@@ -269,8 +291,8 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 200"
               />
-              {errors.totChol && (
-                <p className="text-red-600 text-sm mt-1">{errors.totChol.message}</p>
+              {isSubmitted && errors.totChol && (
+                <p className="text-red-600 text-xs mt-1">{errors.totChol.message}</p>
               )}
             </div>
 
@@ -288,8 +310,8 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 90"
               />
-              {errors.glucose && (
-                <p className="text-red-600 text-sm mt-1">{errors.glucose.message}</p>
+              {isSubmitted && errors.glucose && (
+                <p className="text-red-600 text-xs mt-1">{errors.glucose.message}</p>
               )}
             </div>
           </div>
@@ -320,8 +342,8 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 placeholder={currentSmokerValue === 'No' ? '0 (disabled when not a smoker)' : 'e.g., 0'}
                 disabled={currentSmokerValue === 'No'}
               />
-              {errors.cigsPerDay && (
-                <p className="text-red-600 text-sm mt-1">{errors.cigsPerDay.message}</p>
+              {isSubmitted && errors.cigsPerDay && (
+                <p className="text-red-600 text-xs mt-1">{errors.cigsPerDay.message}</p>
               )}
             </div>
 
@@ -337,8 +359,8 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 <option value="Yes">Yes</option>
                 <option value="No">No</option>
               </select>
-              {errors.currentSmoker && (
-                <p className="text-red-600 text-sm mt-1">{errors.currentSmoker.message}</p>
+              {isSubmitted && errors.currentSmoker && (
+                <p className="text-red-600 text-xs mt-1">{errors.currentSmoker.message}</p>
               )}
             </div>
           </div>
@@ -361,8 +383,8 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 <option value="Yes">Yes</option>
                 <option value="No">No</option>
               </select>
-              {errors.BPMeds && (
-                <p className="text-red-600 text-sm mt-1">{errors.BPMeds.message}</p>
+              {isSubmitted && errors.BPMeds && (
+                <p className="text-red-600 text-xs mt-1">{errors.BPMeds.message}</p>
               )}
             </div>
 
@@ -378,8 +400,8 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 <option value="Yes">Yes</option>
                 <option value="No">No</option>
               </select>
-              {errors.prevalentStroke && (
-                <p className="text-red-600 text-sm mt-1">{errors.prevalentStroke.message}</p>
+              {isSubmitted && errors.prevalentStroke && (
+                <p className="text-red-600 text-xs mt-1">{errors.prevalentStroke.message}</p>
               )}
             </div>
 
@@ -395,8 +417,8 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 <option value="Yes">Yes</option>
                 <option value="No">No</option>
               </select>
-              {errors.prevalentHyp && (
-                <p className="text-red-600 text-sm mt-1">{errors.prevalentHyp.message}</p>
+              {isSubmitted && errors.prevalentHyp && (
+                <p className="text-red-600 text-xs mt-1">{errors.prevalentHyp.message}</p>
               )}
             </div>
 
@@ -412,8 +434,8 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
                 <option value="Yes">Yes</option>
                 <option value="No">No</option>
               </select>
-              {errors.diabetes && (
-                <p className="text-red-600 text-sm mt-1">{errors.diabetes.message}</p>
+              {isSubmitted && errors.diabetes && (
+                <p className="text-red-600 text-xs mt-1">{errors.diabetes.message}</p>
               )}
             </div>
           </div>
@@ -457,6 +479,23 @@ export default function PredictorForm({ onResult }: PredictorFormProps) {
           <strong>Note:</strong> Fields marked with * are required. Optional fields can be left empty and the model will handle missing values appropriately.
         </div>
       </div>
+      {/* Reset confirmation modal */}
+      <Modal
+        open={showResetModal}
+        title="Reset form to edit?"
+        cancelLabel="Keep current result"
+        confirmLabel="Reset and edit"
+        onCancel={() => setShowResetModal(false)}
+        onConfirm={() => {
+          onRequestReset?.();
+          handleReset();
+          setShowResetModal(false);
+        }}
+      >
+        <p className="text-sm">
+          You currently have a prediction displayed. To modify inputs, the form needs to be reset. This will clear the current result.
+        </p>
+      </Modal>
     </div>
   );
 }

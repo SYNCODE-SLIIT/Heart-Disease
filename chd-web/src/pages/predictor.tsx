@@ -4,7 +4,7 @@ import Nav from '../components/Nav';
 import Footer from '../components/Footer';
 import PredictorForm from '../components/PredictorForm';
 import BulkPredictPanel from '../components/BulkPredictPanel';
-import ProbabilityCard from '../components/ProbabilityCard';
+import HeartRiskResultCard, { PredictionResult } from '../components/HeartRiskResultCard';
 import Toast, { useToast } from '../components/ui/Toast';
 import { PredictOut } from '../lib/types';
 import { useAuth } from '../lib/supabaseClient';
@@ -19,6 +19,22 @@ export default function Predictor() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const { toasts, removeToast, success, error: showError } = useToast();
+
+  // Convert API result to HeartRiskResultCard format
+  const convertToPredictionResult = (apiResult: PredictOut): PredictionResult => {
+    const getRiskLevel = (probability: number, threshold: number): 'low' | 'medium' | 'high' => {
+      if (probability < threshold * 0.7) return 'low';
+      if (probability < threshold * 1.3) return 'medium';
+      return 'high';
+    };
+
+    return {
+      probability: apiResult.probability,
+      riskLevel: getRiskLevel(apiResult.probability, apiResult.threshold),
+      factors: [], // Will be populated if API provides topFactors
+      apiResult: apiResult, // Pass original result for ProbabilityCard
+    };
+  };
 
   const handleResult = (newResult: PredictOut) => {
     setResult(newResult);
@@ -123,12 +139,23 @@ export default function Predictor() {
                     } catch {
                       setLastInput(null);
                     }
-                  }} />
+                  }}
+                  locked={!!result}
+                  onRequestReset={() => {
+                    // Clear result and related state when user confirms reset from locked form
+                    setResult(null);
+                    setLastInput(null);
+                    setSaved(false);
+                  }}
+                  />
                 </div>
                 <div className="lg:sticky lg:top-8">
                   {result ? (
                     <div id="prediction-result" className="space-y-6">
-                      <ProbabilityCard result={result} />
+                      {/* New HeartRiskResultCard with toggle for ProbabilityCard */}
+                      <HeartRiskResultCard result={convertToPredictionResult(result)} />
+                      
+                      {/* Save button */}
                       <div className="flex gap-2">
                         <button
                           className={`px-4 py-2 rounded-xl font-semibold transition-all duration-200 disabled:cursor-not-allowed ${
