@@ -16,6 +16,7 @@ MODEL_VERSION = "local-dev"
 ALLOWED_ORIGINS = [
     "heart-disease-phi.vercel.app",
     "https://heart-disease-phi.vercel.app",
+    "https://heart-disease-zhh3.vercel.app",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
