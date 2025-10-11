@@ -1,228 +1,259 @@
-# Heart Disease Prediction — Streamlit Demo
+<div align="center">
 
-https://syncode-sliit-heart-disease-appstreamlit-app-featureprav-txhnms.streamlit.app/
+# HeartSense — 10‑Year CHD Risk Prediction
 
-# HeartSense – Heart Disease Risk Prediction
+Human‑centered, interpretable risk screening for Coronary Heart Disease.
 
-HeartSense is an end-to-end project that predicts 10‑year Coronary Heart Disease (CHD) risk. It includes:
-- A FastAPI backend that serves model predictions
-- A Next.js (TypeScript) web frontend (under `chd-web/`)
-- Jupyter notebooks and Python scripts for data prep and model training
-- Optional Streamlit app for quick exploration
+[![Framework: FastAPI](https://img.shields.io/badge/Framework-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Frontend: Next.js](https://img.shields.io/badge/Frontend-Next.js-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![ML: scikit‑learn](https://img.shields.io/badge/ML-scikit--learn-F7931E?logo=scikitlearn&logoColor=white)](https://scikit-learn.org/)
+[![Deploy: Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
+[![Deploy: Render](https://img.shields.io/badge/Deploy-Render-46E3B7?logo=render&logoColor=white)](https://render.com/)
 
-This README covers setup, dependency install, how to run each part, the project structure, data and features used, preprocessing, model training, and technologies.
+Built by the SYNCODE organization — Group 07 · https://github.com/SYNCODE-SLIIT
 
-## Quickstart
+Live: https://heart-disease-zhh3.vercel.app/ · Demo: https://syncode-sliit-heart-disease-appstreamlit-app-featureprav-txhnms.streamlit.app/ · API: https://heart-disease-tbi9.onrender.com/
 
-- Python backend (FastAPI):
-  - Command to run: `uvicorn app.main:app --reload --port 8000` (from `backend/`)
-- Web frontend (Next.js):
-  - Command to run: `npm run dev` (from `chd-web/`)
+</div>
 
-OAuth (Google/Facebook) setup for the web app:
-- In Supabase Auth Providers, enable Google and/or Facebook and set the redirect URL to `http://localhost:3000/auth/callback` for local dev.
-- Create a `.env.local` in `chd-web/` with:
-  - `NEXT_PUBLIC_SUPABASE_URL=...`
-  - `NEXT_PUBLIC_SUPABASE_ANON_KEY=...`
-  - Optionally configure additional auth settings in Supabase as needed.
+---
 
-Details below.
+## Quick Links
 
-## Project structure
+- Website: https://heart-disease-zhh3.vercel.app/
+- Streamlit Demo: https://syncode-sliit-heart-disease-appstreamlit-app-featureprav-txhnms.streamlit.app/
+- API Base: https://heart-disease-tbi9.onrender.com/
+- Org: https://github.com/SYNCODE-SLIIT
 
-- `backend/`
-  - `app/`
-    - `main.py`: FastAPI app, loads model/threshold, exposes `/api/v1/predict` and `/api/v1/meta`
-    - `schemas.py`: Pydantic request/response schemas
-    - `settings.py`: Paths and CORS settings
-  - `heart_rf_pipeline.pkl`: Trained sklearn Pipeline used by the API
-  - `decision_threshold.json`: JSON config, e.g. `{ "threshold": 0.30 }`
-- `chd-web/` (Next.js app)
-  - `src/components/*`: UI components (Navbar, Footer, etc.)
-  - `src/pages/*`: Pages router (index, predictor, about, privacy)
-  - `src/lib/*`: API client, types/utilities
-  - `public/heart_icon.svg`: Logo and favicon
-- `src/` (training code)
-  - `train.py`: Trains an sklearn Pipeline and saves artifacts
-  - `schema.py`: Declares features lists used in training
-  - `inference.py`: Helper(s) for inference (if used in notebooks/scripts)
-- `notebook/`
-  - `compare_api_vs_model.ipynb`: Sanity check – compare direct model output with API output
-  - Additional notebooks for EDA, preprocessing, and experiments
-- `data/`
-  - `heart.csv`, `framingham.csv`, `heart_disease.csv`: Source datasets (CSV)
-- `model_artifacts/`
-  - `heart_rf_pipeline.pkl`, `decision_threshold.json`: A copy of deployed artifacts
-- `streamlit_app.py` and `app/streamlit_app.py`: Optional Streamlit UI
-- `requirements.txt`: Single place for all Python dependencies
+---
 
-## What the system does
+## Table of Contents
 
-1. Preprocesses patient features (training uses an sklearn `ColumnTransformer` inside a `Pipeline`)
-2. Predicts probability of CHD in the next 10 years using an ML classifier
-3. Applies a configurable decision threshold (default 0.30) to produce a binary label
-4. Serves predictions via a FastAPI endpoint for the web app
+1. Project Objective
+2. Problem Definition
+3. Dataset
+4. Data Preprocessing
+5. Exploratory Data Analysis (EDA)
+6. Modeling Approach
+7. Evaluation Metrics
+8. Interpretability
+9. Software Architecture
+10. Deployment
+11. Local Development
+12. Testing & Validation
+13. Screenshots
+14. Limitations & Future Work
+15. Credits
+16. License
 
-## Dataset and features
+---
 
-- Datasets available under `data/` include framingham-style data (e.g., Framingham Heart Study features).
-- Final features used by the model (see `src/schema.py`):
-  - Numeric: `age`, `totChol`, `sysBP`, `pulsePressure`, `BMI`, `heartRate`, `glucose`, `cigsPerDay`
-  - Categorical: `gender`, `currentSmoker`, `BPMeds`, `prevalentStroke`, `prevalentHyp`, `diabetes`
-- Target: `TenYearCHD`
+## 1) Project Objective
 
-Note: We keep `sysBP` and `pulsePressure` (and drop `diaBP` during training if present). Categorical values are strings as used during training: `Male`/`Female`, `Yes`/`No`.
+- Predict 10‑year risk of coronary heart disease (CHD) using demographic, behavioral, and clinical data.
+- Deliver interpretable predictions with key risk factors highlighted.
+- Implement a lightweight software prototype (API + UI) for education and demonstration.
 
-## Preprocessing and model
+> Note: HeartSense is an educational prototype, not a diagnostic medical device.
 
-- Preprocessing: `ColumnTransformer` with
-  - Numeric pipeline: `SimpleImputer(strategy="median")` + `StandardScaler()`
-  - Categorical pipeline: `SimpleImputer(strategy="most_frequent")` + `OneHotEncoder(handle_unknown="ignore", drop="if_binary", sparse=False)`
-- Classifier: Logistic Regression (`class_weight="balanced"`, `max_iter=500`) in the current training script
-- Saved as an sklearn `Pipeline` (`joblib.dump`), which bundles preprocessing + model together
-- Decision threshold: 0.30 by default (stored in `backend/decision_threshold.json`)
+---
 
-The FastAPI backend loads the exact saved pipeline and infers the expected raw input column order from `preprocessor.feature_names_in_` to avoid drift. It preserves categorical strings (no 0/1 conversion) to match training-time encodings.
+## 2) Problem Definition
 
-## Technologies
+- CVD challenge: CHD can develop silently; early identification is critical.
+- Traditional methods may miss at‑risk individuals or over‑refer low‑risk patients.
+- Goal: Data‑driven, non‑diagnostic screening tool that predicts 10‑year CHD risk and surfaces contributing factors.
+- Target variable: `TenYearCHD` (0 = No CHD in 10 years, 1 = CHD in 10 years).
 
-- Backend: FastAPI, Pydantic v2, Uvicorn
-- ML/DS: scikit-learn, pandas, numpy, joblib
-- Notebooks: Jupyter, ipykernel
-- Optional UI: Streamlit
-- Frontend: Next.js (React, TypeScript, Tailwind), React Hook Form, TanStack Query
+---
 
-## Set up Python environment (venv) and install dependencies
+## 3) Dataset
 
-From the project root:
+- Source: Kaggle – Cardiovascular Dataset (Sirplotsalot), adapted/expanded for this project.
+- Size: ~11,000 rows × 16 columns.
+- Features (human‑readable):
+  - gender: Sex (Male/Female) – Categorical
+  - age: Age (years) – Numeric
+  - education: Education Level (1–4) – Ordinal
+  - currentSmoker: Current Smoker – Binary
+  - cigsPerDay: Cigarettes per Day – Numeric
+  - BPMeds: On Blood Pressure Medication – Binary
+  - prevalentStroke: History of Stroke – Binary
+  - prevalentHyp: Hypertension Diagnosis – Binary
+  - diabetes: Diabetes Diagnosis – Binary
+  - totChol: Total Cholesterol – Numeric
+  - sysBP: Systolic Blood Pressure – Numeric
+  - diaBP: Diastolic Blood Pressure – Numeric
+  - BMI: Body Mass Index – Numeric
+  - heartRate: Resting Heart Rate – Numeric
+  - glucose: Fasting Glucose – Numeric
+  - TenYearCHD: 10‑Year CHD (Target) – Binary
 
-```bash
-# 1) Create and activate a virtual environment (macOS/Linux)
-python3 -m venv myenv
-source myenv/bin/activate
+Notes:
+- The working dataset was expanded using realistic synthetic generation for diversity.
+- Combines demographic, lifestyle, and clinical features, enabling multidimensional risk assessment.
 
-# 2) Upgrade pip (recommended)
-pip install --upgrade pip
+---
 
-# 3) Install all Python dependencies for backend, training, notebooks, and Streamlit
-pip install -r requirements.txt
-```
+## 4) Data Preprocessing (notebook/)
 
-If you use VS Code, select the `myenv` interpreter so notebooks and debugging use the same environment.
+- Missing values: Median imputation for numeric; mode/most frequent for categorical/binary.
+- Encoding: Keep categorical text for model pipeline to one‑hot; binaries as Yes/No → encoded by pipeline.
+- Feature engineering: `pulsePressure = sysBP - diaBP` (clipped at 0).
+- Scaling: Z‑score normalization for numeric features inside the pipeline.
+- Class imbalance: Addressed via model choice and thresholding; can be extended with class weights/SMOTE.
+- Collinearity checks: VIF used to drop redundant features (e.g., often drop `diaBP` when using pulse pressure).
 
-## Run the backend (FastAPI)
+Key notebooks:
+- `notebook/preprocessing.ipynb` – EDA, correlations, pairplots, Cramér’s V for categorical associations, preprocessing.
 
-From the `backend/` folder:
+---
 
-```bash
-# Ensure your venv is active
-uvicorn app.main:app --reload --port 8000
-```
+## 5) Exploratory Data Analysis (EDA) – highlights
 
-- Interactive docs: http://127.0.0.1:8000/docs
-- Health check: http://127.0.0.1:8000/
-- Prediction: POST to `/api/v1/predict`
+- Descriptive stats: Age distribution, BP averages, BMI range, smoker prevalence.
+- Correlations: Age, BP, BMI, cholesterol, glucose correlate with CHD.
+- Risk insights: Higher age, smoking, hypertension, obesity, elevated cholesterol/glucose → higher CHD risk probability.
 
-Example request body (JSON):
+---
 
-```json
-{
-  "gender": "Male",
-  "age": 58,
-  "currentSmoker": "Yes",
-  "cigsPerDay": 12,
-  "BPMeds": "No",
-  "prevalentStroke": "No",
-  "prevalentHyp": "Yes",
-  "diabetes": "No",
-  "totChol": 240,
-  "sysBP": 138,
-  "BMI": 28.5,
-  "heartRate": 78,
-  "glucose": 95,
-  "pulsePressure": 50
-}
-```
+## 6) Modeling Approach
 
-The API responds with probability, predicted label, threshold, and model version.
+- Problem: Binary classification (`TenYearCHD`).
+- Candidates: Logistic Regression (interpretable), Random Forest (non‑linear), Gradient Boosting (XGBoost/LightGBM).
+- Final API model: Scikit‑learn pipeline persisted with joblib; random forest/boosting oriented for robust performance.
+- Strategy: Stratified train/test split; cross‑validation; thresholding to balance sensitivity/specificity.
 
-## Run the frontend (Next.js)
+---
 
-In a separate terminal, from the `chd-web/` folder:
+## 7) Evaluation Metrics
 
-```bash
-npm install
-npm run dev
-```
+- Primary: Recall (clinical sensitivity to identify at‑risk patients).
+- Secondary: Precision, F1, ROC‑AUC, PR‑AUC.
+- Model selection favors higher recall with reasonable precision.
 
-- By default, the frontend expects the API at `http://localhost:8000`. You can override via `NEXT_PUBLIC_API_BASE`.
-- The dev server runs at http://localhost:3000
+---
 
-## Optional: Run the Streamlit app
+## 8) Interpretability
 
-From the project root or the `app/` folder (depending on which app you prefer):
+- Probability output plus discrete label using a configurable threshold.
+- Quick top‑factor hints for batch outputs (heuristic based on standardized magnitudes and categorical flags).
+- SHAP analysis recommended (global + local) to explain feature contributions; can be added to pipeline for richer explanations.
 
-```bash
-streamlit run streamlit_app.py
-# or
-streamlit run app/streamlit_app.py
-```
+---
 
-Purpose: The Streamlit UI is a lightweight, test-oriented interface to quickly probe the model with sliders and dropdowns. It’s useful for local demos and manual QA separate from the Next.js site.
+## 9) Software Architecture
 
-Tip: Ensure you’ve trained a model or placed the expected artifact (`models/model.joblib`) if `app/Home.py` relies on it, or update the app to point to your current artifact path.
+Monorepo layout:
 
-## Training the model
+- `backend/` – FastAPI service
+  - Model artifacts: `backend/heart_rf_pipeline.pkl`, `backend/decision_threshold.json`
+  - App code: `backend/app/main.py`, `backend/app/prepare.py`, `backend/app/schemas.py`, etc.
+  - Settings: `backend/app/settings.py` (includes CORS settings and paths)
+  - Endpoints:
+    - `GET /` – health check
+    - `GET /api/v1/meta` – model metadata, expected columns, threshold
+    - `POST /api/v1/predict` – single prediction
+    - `POST /batch` – JSON batch prediction
+    - `POST /api/v1/batch` – JSON batch prediction (versioned)
+    - `GET /batch/export` – export last batch results (CSV/XLSX)
 
-Run `src/train.py` to train a fresh model.
+- `chd-web/` – Next.js (TypeScript) frontend
+  - Pages: risk predictor UI (`/predictor`)
+  - Components: form, result card with “advanced details,” batch upload, auth helpers
+  - Env var: `NEXT_PUBLIC_API_BASE` to point to Render API
+  - Optional rewrites to proxy API via `/api/*`
 
-```bash
-python src/train.py
-```
+- `app/` – Streamlit app (separate demo UI)
 
-It will:
-- Load data from `data/heart.csv`
-- Engineer `pulsePressure` if `diaBP` is available (then drop `diaBP`)
-- Fit the preprocessing + Logistic Regression pipeline
-- Report validation metrics (AUC/ACC)
-- Save the pipeline into `models/model.joblib`
+- `notebook/` – Jupyter notebooks for EDA and preprocessing
 
-You can then update the API’s `heart_rf_pipeline.pkl` with this new artifact (after evaluating). Ensure the API’s expected columns match the new pipeline (`feature_names_in_`).
+---
 
-## Notebooks
+## 10) Deployment
 
-Use `notebook/compare_api_vs_model.ipynb` to validate consistency between direct model inference and the API.
-- Set `THRESH = 0.30` to match the API/site
-- Replace the sample JSON with your test case and run all cells
+- Frontend: Vercel (root directory set to `chd-web/`).
+- Backend: Render (FastAPI, warm instance recommended for lower latency). Health endpoint `/`.
+- Streamlit demo: Hosted separately (see link above).
 
-Other notebooks:
-- `notebook/preprocessing.ipynb`: EDA, cleaning, imputers, encoding, and balancing (uses `imbalanced-learn` SMOTE). Requires `pandas`, `scikit-learn`, `matplotlib`, `seaborn`, and `imbalanced-learn` (already in `requirements.txt`).
-- `notebook/model.ipynb`: Builds a `RandomForestClassifier` within an sklearn `Pipeline` and demonstrates thresholding at 0.30; saves `heart_rf_pipeline.pkl` with `joblib.dump`. Ensure you keep categorical string forms (Male/Female, Yes/No) at raw input before the preprocessor.
+Environment variables:
+- On Vercel: `NEXT_PUBLIC_API_BASE=https://heart-disease-tbi9.onrender.com`
+- On Render: CORS allowed origins must include your Vercel domain(s) with scheme, e.g. `https://your-app.vercel.app` and any custom domains.
 
-To use the notebooks with the project venv in VS Code, select the `myenv` interpreter and install the root `requirements.txt` first.
+---
 
-## API contract (summary)
+## 11) Local Development
 
-Input JSON fields (raw, before model preprocessing):
-- Required: `age`, `gender`, `sysBP`, `BMI`
-- Optional but supported: `pulsePressure`, `heartRate`, `totChol`, `glucose`, `cigsPerDay`, `currentSmoker`, `BPMeds`, `prevalentStroke`, `prevalentHyp`, `diabetes`
-- Categorical values must be `Male`/`Female` and `Yes`/`No`
+Prerequisites: Python 3.10+, Node.js 18+.
 
-Response JSON:
-- `probability` (float in [0,1])
-- `prediction` (int: 1=high risk, 0=low risk)
-- `threshold` (float)
-- `model_version` (string)
+Backend (FastAPI):
+- Create/activate a venv, then install:
+  - `pip install -r backend/requirements.txt`
+- Run locally:
+  - `uvicorn app.main:app --reload --port 8000` (from `backend/`)
+- Docs: `http://localhost:8000/docs`
 
-## Troubleshooting
+Frontend (Next.js):
+- From `chd-web/`:
+  - `npm install`
+  - Set `.env.local` with `NEXT_PUBLIC_API_BASE=http://localhost:8000`
+  - `npm run dev` (http://localhost:3000)
 
-- If the API probability differs from notebook probability for the same input, ensure:
-  - Both use the same model file
-  - Categorical inputs are strings (not 0/1) and normalized to `Male`/`Female`, `Yes`/`No`
-  - The same threshold is applied (0.30 by default)
-- CORS errors from the web app: verify `ALLOWED_ORIGINS` in `backend/app/settings.py`
-- Frontend cannot reach API: set `NEXT_PUBLIC_API_BASE` and restart `npm run dev`
+Streamlit demo:
+- From `app/`: `streamlit run streamlit_app.py`
 
-## License
+---
 
-For academic/demo purposes. Please verify dataset licensing and attribution before redistribution.
+## 12) Testing & Validation
+
+- API contract tests (example in repo: `test_api.py`).
+- Form validation: Required fields, numeric ranges; submit‑only errors for calmer UX.
+- Manual acceptance: End‑to‑end from UI to API with real/synthetic inputs.
+
+---
+
+## 13) Screenshots
+
+Below are key screens from the live website. All images are stored under `docs/images/`.
+
+### Home
+![Home](docs/images/Home.png)
+
+### About
+![About](docs/images/About.png)
+
+### Privacy
+![Privacy](docs/images/Privacy.png)
+
+### Profile
+![Profile](docs/images/Profile.png)
+
+### My Data
+![My Data](docs/images/MyData.png)
+
+### Predict Form
+![Predict Form](docs/images/PredictForm.png)
+
+### Predict Result
+![Predict Result](docs/images/Result.png)
+
+—
+
+## 14) Limitations & Future Work
+
+- Real‑world deployment requires validation on hospital EHR data.
+- No longitudinal/temporal features; uses baseline measurements.
+- Future: what‑if simulation, mobile app, wearable/IoT integration, subgroup fairness, and full SHAP explanations in UI.
+
+—
+
+## 15) Credits
+
+- Dataset: Kaggle Cardiovascular Dataset (Sirplotsalot), adapted.
+- Libraries: FastAPI, scikit‑learn, pandas, NumPy, Next.js, Tailwind CSS, Streamlit.
+
+—
+
+## 16) License
+
+This project is for educational and research purposes only and is not a medical device. Check repository license terms before reuse.
