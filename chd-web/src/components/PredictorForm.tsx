@@ -23,7 +23,9 @@ const predictSchema = z.object({
   glucose: z.number().min(50, 'Glucose must be at least 50 mg/dL').max(500, 'Glucose must be less than 500 mg/dL').optional(),
   
   // Lifestyle
-  cigsPerDay: z.number().min(0, 'Cannot be negative').max(100, 'Must be less than 100').optional(),
+  // Ensure integer for cigarettes per day
+  // Note: we also coerce in the input to integers
+  cigsPerDay: z.number().int('Must be an integer').min(0, 'Cannot be negative').max(100, 'Must be less than 100').optional(),
   currentSmoker: z.enum(['Yes', 'No']).optional(),
   
   // Medical history
@@ -49,6 +51,7 @@ export default function PredictorForm({ onResult, locked = false, onRequestReset
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [lastEdited, setLastEdited] = useState<'cigs' | 'smoker' | null>(null);
 
   const {
     register,
@@ -59,11 +62,29 @@ export default function PredictorForm({ onResult, locked = false, onRequestReset
     setValue,
   } = useForm<FormData>({ resolver: zodResolver(predictSchema), mode: 'onSubmit' });
 
+  // Compose register with custom onChange so we don't override RHF handlers
+  const smokerReg = register('currentSmoker', { setValueAs: (v) => (v === '' ? undefined : v) });
+  const cigsReg = register('cigsPerDay', {
+    valueAsNumber: true,
+    setValueAs: (v) => {
+      if (v === '' || v === null || typeof v === 'undefined') return undefined;
+      const n = parseInt(String(v), 10);
+      if (Number.isNaN(n)) return undefined;
+      return n < 0 ? 0 : n;
+    },
+  });
+
   // Prevent typing minus/exponent/plus in number inputs
   const preventMinus: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
     if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
       e.preventDefault();
     }
+  };
+
+  // Prevent mouse wheel from changing number inputs
+  const preventWheel: React.WheelEventHandler<HTMLInputElement> = (e) => {
+    // Blur to avoid accidental value changes when scrolling
+    (e.currentTarget as HTMLInputElement).blur();
   };
 
   // Prevent pasting invalid characters into number fields
@@ -77,18 +98,28 @@ export default function PredictorForm({ onResult, locked = false, onRequestReset
   // If currentSmoker is 'No', enforce cigsPerDay = 0 and disable field
   const currentSmokerValue = watch('currentSmoker');
   const cigsValue = watch('cigsPerDay');
+  // Drive cigs from smoker when smoker was last edited
   useEffect(() => {
+    if (lastEdited !== 'smoker') return;
     if (currentSmokerValue === 'No') {
+      if (cigsValue !== 0) {
+        setValue('cigsPerDay', 0, { shouldValidate: false, shouldDirty: true });
+      }
+    } else if (currentSmokerValue === 'Yes') {
+      if (typeof cigsValue !== 'number' || cigsValue === 0) {
+        setValue('cigsPerDay', 1, { shouldValidate: false, shouldDirty: true });
+      }
+    }
+  }, [currentSmokerValue, cigsValue, lastEdited, setValue]);
+
+  // Hard lock cigs to 0 whenever smoker is not 'Yes' (covers initial state and non-user driven changes)
+  useEffect(() => {
+    if (currentSmokerValue !== 'Yes' && cigsValue !== 0) {
       setValue('cigsPerDay', 0, { shouldValidate: false, shouldDirty: true });
     }
-  }, [currentSmokerValue, setValue]);
+  }, [currentSmokerValue, cigsValue, setValue]);
 
-  // If cigsPerDay > 0, enforce currentSmoker = 'Yes'
-  useEffect(() => {
-    if (typeof cigsValue === 'number' && cigsValue > 0 && currentSmokerValue !== 'Yes') {
-      setValue('currentSmoker', 'Yes', { shouldValidate: false, shouldDirty: true });
-    }
-  }, [cigsValue, currentSmokerValue, setValue]);
+  // (Intentionally no real-time cigs->smoker sync; handled onBlur of cigs input)
 
   const onSubmit: SubmitHandler<FormData> = async (data) => {
     setIsLoading(true);
@@ -196,7 +227,7 @@ export default function PredictorForm({ onResult, locked = false, onRequestReset
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Systolic Blood Pressure (mmHg){isSubmitted && errors.sysBP && <span className="text-red-600"> *</span>}
+                Systolic BP (mmHg){isSubmitted && errors.sysBP && <span className="text-red-600"> *</span>}
               </label>
               <input
                 type="number"
@@ -204,6 +235,7 @@ export default function PredictorForm({ onResult, locked = false, onRequestReset
                 min={70}
                 {...register('sysBP', { valueAsNumber: true })}
                 onKeyDown={preventMinus}
+                onWheel={preventWheel}
                 onPaste={preventInvalidPaste}
                 className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 ${isSubmitted && errors.sysBP ? 'border-red-400' : 'border-gray-300'}`}
                 placeholder="e.g., 130"
@@ -223,6 +255,7 @@ export default function PredictorForm({ onResult, locked = false, onRequestReset
                 min={10}
                 {...register('pulsePressure', { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
                 onKeyDown={preventMinus}
+                onWheel={preventWheel}
                 onPaste={preventInvalidPaste}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 40"
@@ -242,6 +275,7 @@ export default function PredictorForm({ onResult, locked = false, onRequestReset
                 min={10}
                 {...register('BMI', { valueAsNumber: true })}
                 onKeyDown={preventMinus}
+                onWheel={preventWheel}
                 onPaste={preventInvalidPaste}
                 className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 ${isSubmitted && errors.BMI ? 'border-red-400' : 'border-gray-300'}`}
                 placeholder="e.g., 25.5"
@@ -261,6 +295,7 @@ export default function PredictorForm({ onResult, locked = false, onRequestReset
                 min={30}
                 {...register('heartRate', { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
                 onKeyDown={preventMinus}
+                onWheel={preventWheel}
                 onPaste={preventInvalidPaste}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 75"
@@ -287,6 +322,7 @@ export default function PredictorForm({ onResult, locked = false, onRequestReset
                 min={100}
                 {...register('totChol', { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
                 onKeyDown={preventMinus}
+                onWheel={preventWheel}
                 onPaste={preventInvalidPaste}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 200"
@@ -306,6 +342,7 @@ export default function PredictorForm({ onResult, locked = false, onRequestReset
                 min={50}
                 {...register('glucose', { valueAsNumber: true, setValueAs: (v) => (Number.isNaN(v) ? undefined : v) })}
                 onKeyDown={preventMinus}
+                onWheel={preventWheel}
                 onPaste={preventInvalidPaste}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 placeholder="e.g., 90"
@@ -322,37 +359,14 @@ export default function PredictorForm({ onResult, locked = false, onRequestReset
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Lifestyle</h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Cigarettes per Day
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                min={0}
-                {...register('cigsPerDay', { valueAsNumber: true, setValueAs: (v) => {
-                  if (v === '' || v === null || typeof v === 'undefined') return undefined;
-                  const n = Number(v);
-                  if (Number.isNaN(n)) return undefined;
-                  return n < 0 ? 0 : n;
-                } })}
-                onKeyDown={preventMinus}
-                onPaste={preventInvalidPaste}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                placeholder={currentSmokerValue === 'No' ? '0 (disabled when not a smoker)' : 'e.g., 0'}
-                disabled={currentSmokerValue === 'No'}
-              />
-              {isSubmitted && errors.cigsPerDay && (
-                <p className="text-red-600 text-xs mt-1">{errors.cigsPerDay.message}</p>
-              )}
-            </div>
-
+            {/* Left: Current Smoker */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Current Smoker
               </label>
               <select
-                {...register('currentSmoker', { setValueAs: (v) => (v === '' ? undefined : v) })}
+                {...smokerReg}
+                onChange={(e) => { setLastEdited('smoker'); smokerReg.onChange(e); }}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white"
               >
                 <option value="">Select option</option>
@@ -361,6 +375,41 @@ export default function PredictorForm({ onResult, locked = false, onRequestReset
               </select>
               {isSubmitted && errors.currentSmoker && (
                 <p className="text-red-600 text-xs mt-1">{errors.currentSmoker.message}</p>
+              )}
+            </div>
+
+            {/* Right: Cigarettes per Day (locked unless smoker Yes) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Cigarettes per Day
+              </label>
+              <input
+                type="number"
+                step={1}
+                min={0}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                {...cigsReg}
+                onKeyDown={preventMinus}
+                onWheel={preventWheel}
+                onPaste={preventInvalidPaste}
+                onChange={(e) => { setLastEdited('cigs'); cigsReg.onChange(e); }}
+                onBlur={(e) => {
+                  setLastEdited('cigs');
+                  cigsReg.onBlur(e);
+                  const raw = (e.target as HTMLInputElement).value;
+                  const n = parseInt(raw || '0', 10);
+                  const want = n > 0 ? 'Yes' : 'No';
+                  if (currentSmokerValue !== want) {
+                    setValue('currentSmoker', want, { shouldValidate: false, shouldDirty: true });
+                  }
+                }}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 disabled:bg-gray-50 disabled:text-gray-500"
+                placeholder={currentSmokerValue === 'Yes' ? 'e.g., 1' : '0 (locked when not a smoker)'}
+                disabled={currentSmokerValue !== 'Yes'}
+              />
+              {isSubmitted && errors.cigsPerDay && (
+                <p className="text-red-600 text-xs mt-1">{errors.cigsPerDay.message}</p>
               )}
             </div>
           </div>
